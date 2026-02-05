@@ -26,3 +26,4 @@ dist-ssr
 # Don't cache gh-pages deployment cache
 .cache
 node_modules/
+node_modules/
