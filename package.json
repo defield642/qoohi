@@ -3,10 +3,10 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://github.com/defield642/QOOHI.git",
+  "homepage": "https://github.com/defield642/QoO-.git",
   "repository": {
     "type": "git",
-    "url": "https://github.com/defield642/QOOHI.git"
+    "url": "https://github.com/defield642/QoO-.git"
   },
   "scripts": {
     "dev": "vite",
