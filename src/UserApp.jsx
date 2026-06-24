@@ -4,7 +4,7 @@ import {
   useCallback,
   useMemo,
 } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   FaArrowRight,
   FaBookOpen,
