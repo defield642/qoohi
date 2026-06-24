@@ -10,14 +10,23 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:api": "wrangler dev",
+    "start": "node app.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "cf:deploy": "wrangler deploy",
+    "cf:d1:migrate": "wrangler d1 execute qoohi-db --local --file=./schema.sql",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
+    "@hono/node-server": "^2.0.4",
+    "better-sqlite3": "^12.10.0",
+    "dotenv": "^17.4.2",
     "framer-motion": "^12.18.1",
+    "hono": "4.12.16",
+    "nodemailer": "^8.0.10",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-icons": "^5.5.0"
@@ -35,6 +44,7 @@
     "globals": "^16.0.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.0",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "wrangler": "4.86.0"
   }
 }

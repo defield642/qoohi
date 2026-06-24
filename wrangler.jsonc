@@ -1,0 +1,19 @@
+{
+	"name": "qoohi-api",
+	"main": "worker/app.js",
+	"compatibility_date": "2026-05-03",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "qoohi-db",
+			"database_id": "290b4048-f78c-45a0-a33d-583fb94629e6",
+			"remote": true
+		}
+	],
+	"vars": {
+		"APP_URL": "http://localhost:5173"
+	}
+}

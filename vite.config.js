@@ -3,6 +3,20 @@ import react from '@vitejs/plugin-react-swc'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/qoohi/',
+  base: '/',
   plugins: [react()],
+  server: {
+    proxy: {
+      "/api": "http://127.0.0.1:8787",
+    },
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        main: new URL('./index.html', import.meta.url).pathname,
+        admin: new URL('./admin.html', import.meta.url).pathname,
+        caleb: new URL('./caleb.html', import.meta.url).pathname,
+      },
+    },
+  },
 })
