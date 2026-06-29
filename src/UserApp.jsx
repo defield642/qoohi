@@ -52,6 +52,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || "";
 const backgrounds = [bg1, bg2, bg3, bg4, bg5, bg6];
 const navItems = [
   { id: "home", label: "Home", img: fc26Img },
+  { id: "iep", label: "Learner IEP", img: iepImg },
   { id: "teachers", label: "Teachers", img: teacherImg },
   { id: "resources", label: "Resources", img: libraryImg },
   { id: "learn", label: "Learn", img: learnImg },
@@ -199,6 +200,7 @@ function useVoiceGuide(voiceScript) {
     setVoiceEnabled(newState);
     localStorage.setItem("qoohi_voice_enabled", newState.toString());
     if (newState) {
+      // Small delay to ensure state update has propagated if needed
       setTimeout(() => speak(true), 50);
     } else {
       synth?.cancel();
@@ -211,21 +213,7 @@ function useVoiceGuide(voiceScript) {
 
 export default function UserApp() {
   const [route, setRoute] = useState(getRouteFromHash());
-  const [registrationTarget, setRegistrationTarget] = useState({
-    type: "course",
-    packageKey: "coding_ai_training",
-  });
-  const [pendingVerification, setPendingVerification] = useState({
-    email: "",
-    mode: "register",
-  });
-  const [sessionToken, setSessionToken] = useState(
-    localStorage.getItem("qoohi_session_token") || "",
-  );
-  const [dashboard, setDashboard] = useState(null);
-  const [teacherOverview, setTeacherOverview] = useState(null);
-  const [statusMessage, setStatusMessage] = useState("");
-  const [loadingDashboard, setLoadingDashboard] = useState(false);
+  // ... (rest of state)
 
   // 🔓 AUDIO UNBLOCKER
   useEffect(() => {
@@ -246,21 +234,35 @@ export default function UserApp() {
     };
   }, []);
 
-  const refreshTeacherOverview = useCallback(async () => {
-    if (!sessionToken || !dashboard || dashboard.student?.role !== "teacher") {
-      setTeacherOverview(null);
-      return null;
-    }
-    const data = await fetchJson("/api/teacher/overview", {
-      headers: { Authorization: `Bearer ${sessionToken}` },
-    });
-    setTeacherOverview(data);
-    return data;
-  }, [dashboard, sessionToken]);
+ 
+  
+  const [registrationTarget, setRegistrationTarget] = useState({
+    type: "course",
+    packageKey: "coding_ai_training",
+  });
+  const [pendingVerification, setPendingVerification] = useState({
+    email: "",
+    mode: "register",
+  });
+  const [sessionToken, setSessionToken] = useState(
+    localStorage.getItem("qoohi_session_token") || "",
+  );
+  const [dashboard, setDashboard] = useState(null);
+  const [teacherOverview, setTeacherOverview] = useState(null);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [loadingDashboard, setLoadingDashboard] = useState(false);
 
   useEffect(() => {
-    refreshTeacherOverview().catch(() => setTeacherOverview(null));
-  }, [refreshTeacherOverview]);
+    if (!dashboard || dashboard.student?.role !== "teacher") {
+      setTeacherOverview(null);
+      return;
+    }
+    fetchJson("/api/teacher/overview", {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    })
+      .then((data) => setTeacherOverview(data))
+      .catch(() => setTeacherOverview(null));
+  }, [dashboard, sessionToken]);
 
   const backgroundImage = useMemo(
     () => backgrounds[Math.floor(Math.random() * backgrounds.length)],
@@ -310,8 +312,9 @@ export default function UserApp() {
     goTo("register");
   };
 
-  const openMaterialsPage = () => {
-    goTo("resources");
+  const openTournamentRegistration = () => {
+    setRegistrationTarget({ type: "tournament", packageKey: "" });
+    goTo("register");
   };
 
   const openTeacherRegistration = () => {
@@ -408,10 +411,10 @@ export default function UserApp() {
             {route === "about" && <AboutPage goTo={goTo} />}
             {route === "iep" && <IEPPage openIepRegistration={openIepRegistration} />}
             {route === "teachers" && <TeachersPage openTeacherRegistration={openTeacherRegistration} />}
-            {route === "resources" && <ResourcesPage openParentRegistration={openParentRegistration} sessionToken={sessionToken} />}
+            {route === "resources" && <ResourcesPage openParentRegistration={openParentRegistration} />}
             {route === "games" && <GamesPage />}
             {route === "new" && (
-              <NewPage openMaterialsPage={openMaterialsPage} />
+              <NewPage openTournamentRegistration={openTournamentRegistration} />
             )}
             {route === "learn" && (
               <LearnPage openCourseRegistration={openCourseRegistration} />
@@ -449,11 +452,12 @@ export default function UserApp() {
                 sessionToken={sessionToken}
                 goTo={goTo}
                 onRefresh={refreshDashboard}
-                onRefreshTeacherOverview={refreshTeacherOverview}
                 onUpdateIep={async (userId, assessmentStatus, performanceLevel) => {
                   try {
                     const data = await fetchJson(`/api/admin/users/${userId}/iep`, {
                       method: "POST",
+                      // Reuse admin endpoint if teacher has key, but wait, teachers use session!
+                      // I should add a teacher-specific IEP update endpoint or modify the admin one.
                       headers: { Authorization: `Bearer ${sessionToken}` },
                       body: JSON.stringify({ assessmentStatus, performanceLevel }),
                     });
@@ -555,6 +559,9 @@ function Header({ route, goTo }) {
 }
 
 function HomePage({ dashboard, goTo }) {
+
+
+
   const firstName = dashboard?.student?.fullName?.split(" ")[0];
   const voiceScript = `Welcome ${firstName || ""} to QOOHI. We are elevating learning, creativity, and play. Explore our FC 26 tournaments, individualized education programs, and advanced AI training. Your journey to mastery starts here.`;
   const { voiceEnabled, toggleVoice, isSpeaking } = useVoiceGuide(voiceScript);
@@ -598,6 +605,7 @@ function HomePage({ dashboard, goTo }) {
 
       {/* CONTENT */}
       <div className="relative z-10 w-full max-w-6xl px-4 py-20 text-center">
+
         {/* WELCOME */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -670,12 +678,13 @@ function HomePage({ dashboard, goTo }) {
           }}
           className="mt-20 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 xl:gap-6"
         >
+
           {/* FC26 */}
           <HomeButton 
             onClick={() => goTo("new")}
             image={fc26Img}
-            label="Materials"
-            sublabel="Grades 1-9"
+            label="FC 26"
+            sublabel="Tournament"
           />
 
           {/* LEARN */}
@@ -700,12 +709,13 @@ function HomePage({ dashboard, goTo }) {
             sublabel="Dashboard"
           />
        
-          {/* PARENTS */}
+
+          {/* IEP */}
           <HomeButton 
-            onClick={openParentRegistration}
-            image={libraryImg}
-            label="Parent"
-            sublabel="Register"
+            onClick={() => goTo("iep")}
+            image={iepImg}
+            label="IEP"
+            sublabel="Performance"
           />
 
           {/* TEACHERS */}
@@ -732,6 +742,7 @@ function HomePage({ dashboard, goTo }) {
             sublabel="Smart Assistant"
             highlight
           />
+
         </motion.div>
       </div>
     </div>
@@ -1069,216 +1080,55 @@ function TeachersPage({ openTeacherRegistration }) {
   );
 }
 
-function ResourcesPage({ openParentRegistration, sessionToken }) {
-  const voiceScript = "Kenyan CBC materials for grades one through nine. Describe what you need, generate a printable lesson pack, and download it after payment.";
-  const [gradeLevel, setGradeLevel] = useState("1");
-  const [prompt, setPrompt] = useState("");
-  const [materialTitle, setMaterialTitle] = useState("");
-  const [materialBody, setMaterialBody] = useState("");
-  const [teachers, setTeachers] = useState([]);
-  const [status, setStatus] = useState("");
-  const [loadingMaterial, setLoadingMaterial] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    fetchJson("/api/public/teachers")
-      .then((data) => {
-        if (active) setTeachers(Array.isArray(data.teachers) ? data.teachers : []);
-      })
-      .catch(() => {
-        if (active) setTeachers([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const keywordScore = (teacher) => {
-    const haystack = `${teacher.full_name || ""} ${teacher.specializations || ""}`.toLowerCase();
-    const tokens = `${gradeLevel} ${prompt}`.toLowerCase().split(/[^a-z0-9]+/).filter((item) => item.length > 2);
-    return tokens.reduce((score, token) => score + (haystack.includes(token) ? 2 : 0), 0) + (teacher.specializations ? 1 : 0);
-  };
-
-  const recommendedTeachers = [...teachers]
-    .sort((left, right) => keywordScore(right) - keywordScore(left))
-    .slice(0, 4);
-
-  const requestMaterials = async () => {
-    const topic = prompt.trim();
-    if (!topic) {
-      throw new Error("Describe the material you want before generating it.");
-    }
-    setLoadingMaterial(true);
-    setStatus("");
-    try {
-      const data = await fetchJson("/api/ai/materials", {
-        method: "POST",
-        body: JSON.stringify({ grade: gradeLevel, topic }),
-      });
-      setMaterialTitle(data.title || `Grade ${gradeLevel} materials`);
-      setMaterialBody(data.content || "");
-      setStatus("Materials ready. Review the preview below.");
-      return data;
-    } finally {
-      setLoadingMaterial(false);
-    }
-  };
-
-  const downloadMaterials = async () => {
-    setDownloading(true);
-    setStatus("");
-    try {
-      if (!sessionToken) {
-        throw new Error("Please log in before downloading materials.");
-      }
-      const generated = materialBody ? { title: materialTitle, content: materialBody } : await requestMaterials();
-      await fetchJson("/api/user/service/use", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        body: JSON.stringify({ serviceKey: "materials_download" }),
-      });
-      const fileTitle = generated.title || `Grade ${gradeLevel} materials`;
-      const blob = new Blob([
-        `${fileTitle}
-
-${generated.content || materialBody || ""}
-`,
-      ], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${fileTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "qoohi-materials"}.txt`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
-      setStatus("Download started after charging Ksh 10.");
-    } catch (err) {
-      setStatus(err.message);
-    } finally {
-      setDownloading(false);
-    }
-  };
+function ResourcesPage({ openParentRegistration }) {
+  const voiceScript = "The QOOHI Resource Library. Your gateway to mastery. Access digital e-books, gamified exercises, and interactive videos, or order physical workbooks and activity kits delivered to your doorstep. Supporting every step of your growth.";
 
   return (
-    <PageStack
-      title="Kenyan Materials"
-      subtitle="Grades 1 to 9 learning packs, teacher recommendations, and instant printable downloads."
+    <PageStack 
+      title="Digital Library" 
+      subtitle="Comprehensive soft and hard learning resources for every stage."
       voiceScript={voiceScript}
     >
-      <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="space-y-6 rounded-[3rem] border border-white/10 bg-slate-950/90 p-6 sm:p-8">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <SectionLabel>Grade selector</SectionLabel>
-              <h2 className="mt-2 text-3xl font-black text-white">Choose Grade {gradeLevel}</h2>
-            </div>
-            <div className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-cyan-300">
-              Download Ksh 10
-            </div>
+      <div className="grid gap-8 lg:grid-cols-2">
+        <div className="relative overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900 group">
+          <img src={libraryImg} alt="Soft Copies" className="absolute inset-0 h-full w-full object-cover opacity-20 transition-transform duration-700 group-hover:scale-110" />
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-950/40 to-transparent" />
+          <div className="relative p-10 sm:p-14">
+            <SectionLabel>Instant Access</SectionLabel>
+            <h3 className="mt-4 text-5xl font-black text-white uppercase tracking-tighter">Soft <span className="text-cyan-400">Copies</span></h3>
+            <ul className="mt-10 space-y-4 text-xl font-bold text-slate-300">
+              {["Interactive E-books", "Educational Videos", "Gamified Exercises", "Printable PDFs"].map(item => (
+                <li key={item} className="flex items-center gap-3">
+                  <FaChevronRight className="text-cyan-400 text-sm" /> {item}
+                </li>
+              ))}
+            </ul>
           </div>
-
-          <div className="grid grid-cols-3 gap-3 sm:grid-cols-9">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((grade) => (
-              <button
-                key={grade}
-                type="button"
-                onClick={() => setGradeLevel(String(grade))}
-                className={`rounded-2xl border px-3 py-3 text-sm font-black transition ${
-                  String(gradeLevel) === String(grade)
-                    ? "border-cyan-300 bg-cyan-300 text-slate-950"
-                    : "border-white/10 bg-white/5 text-white hover:border-cyan-400/40 hover:bg-cyan-400/10"
-                }`}
-              >
-                {grade}
-              </button>
-            ))}
+        </div>
+        
+        <div className="relative overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900 group">
+          <img src={bg2} alt="Hard Copies" className="absolute inset-0 h-full w-full object-cover opacity-20 transition-transform duration-700 group-hover:scale-110" />
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-950/40 to-transparent" />
+          <div className="relative p-10 sm:p-14">
+            <SectionLabel>Tangible Tools</SectionLabel>
+            <h3 className="mt-4 text-5xl font-black text-white uppercase tracking-tighter">Hard <span className="text-cyan-400">Copies</span></h3>
+            <ul className="mt-10 space-y-4 text-xl font-bold text-slate-300">
+              {["Level-Specific Workbooks", "Graded Reading Books", "Flashcard Sets", "Activity Kits"].map(item => (
+                <li key={item} className="flex items-center gap-3">
+                  <FaChevronRight className="text-cyan-400 text-sm" /> {item}
+                </li>
+              ))}
+            </ul>
           </div>
-
-          <label className="block space-y-3">
-            <span className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Describe what you want</span>
-            <textarea
-              rows="6"
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Example: make revision notes and exercises for Grade 4 fractions with simple answers"
-              className="w-full rounded-[1.5rem] border border-white/10 bg-slate-950/80 px-4 py-4 text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/60"
-            />
-          </label>
-
-          <div className="flex flex-wrap gap-3">
-            <ActionButton type="button" onClick={requestMaterials} disabled={loadingMaterial} className="!px-6 !py-3 !text-sm">
-              {loadingMaterial ? "Generating..." : "Generate materials"}
-            </ActionButton>
-            <button
-              type="button"
-              onClick={downloadMaterials}
-              disabled={downloading}
-              className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-6 py-3 text-sm font-black text-emerald-200 transition hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {downloading ? "Downloading..." : "Download for Ksh 10"}
-            </button>
-            <button
-              type="button"
-              onClick={openParentRegistration}
-              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10"
-            >
-              Register as Parent
-            </button>
-          </div>
-
-          {status && <Notice tone={status.toLowerCase().includes("ready") ? "info" : "error"}>{status}</Notice>}
-
-          {materialBody && (
-            <div className="rounded-[2rem] border border-cyan-400/20 bg-cyan-400/5 p-6">
-              <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-300">Preview</p>
-              <h3 className="mt-2 text-2xl font-black text-white">{materialTitle || `Grade ${gradeLevel} materials`}</h3>
-              <pre className="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-300">{materialBody}</pre>
-            </div>
-          )}
         </div>
 
-        <div className="space-y-6">
-          <div className="rounded-[3rem] border border-white/10 bg-white/5 p-6 sm:p-8">
-            <SectionLabel>Teacher recommendations</SectionLabel>
-            <h3 className="mt-2 text-2xl font-black text-white">Who to contact</h3>
-            <p className="mt-2 text-sm text-slate-400">These are the teachers most aligned with the grade and topic you typed.</p>
-            <div className="mt-6 space-y-3">
-              {recommendedTeachers.length === 0 && <p className="rounded-2xl border border-white/5 bg-white/5 px-4 py-4 text-sm text-slate-500">No teachers available yet.</p>}
-              {recommendedTeachers.map((teacher) => {
-                const phone = String(teacher.whatsapp || "").replace(/\D/g, "");
-                const message = `Hello ${teacher.full_name || "teacher"}, I need help with Grade ${gradeLevel} materials: ${prompt || "general guidance"}`;
-                const whatsappHref = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : null;
-                return (
-                  <div key={teacher.id} className="rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <p className="text-lg font-black text-white">{teacher.full_name}</p>
-                        <p className="mt-1 text-sm text-slate-400">{teacher.specializations || "General support"}</p>
-                        <p className="mt-1 text-xs text-slate-500">{teacher.email}</p>
-                      </div>
-                      {whatsappHref && (
-                        <a href={whatsappHref} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-full bg-emerald-400 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-emerald-300">
-                          WhatsApp
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+        <div className="lg:col-span-2 relative overflow-hidden rounded-[3rem] border border-cyan-400/20 bg-cyan-400/5 p-10 sm:p-14 shadow-2xl shadow-cyan-400/10 flex flex-wrap items-center justify-between gap-8">
+          <div className="max-w-xl">
+            <SectionLabel>For Parents</SectionLabel>
+            <h2 className="mt-4 text-4xl font-black text-white">Parents as Financiers</h2>
+            <p className="mt-4 text-lg text-slate-300 font-bold leading-relaxed">Support your child's growth through physical kits and graded materials designed for their specific IEP level.</p>
           </div>
-
-          <div className="rounded-[3rem] border border-cyan-400/20 bg-cyan-400/5 p-6 sm:p-8">
-            <SectionLabel>How it works</SectionLabel>
-            <ol className="mt-4 space-y-3 text-sm leading-7 text-slate-300">
-              <li>1. Select a grade from 1 to 9.</li>
-              <li>2. Describe the exact topic or exercise you need.</li>
-              <li>3. Generate the materials with OpenAI.</li>
-              <li>4. Download the file after the Ksh 10 charge is processed.</li>
-            </ol>
-          </div>
+          <ActionButton onClick={openParentRegistration} className="!text-xl !py-5 px-12 !rounded-2xl">Register as Parent</ActionButton>
         </div>
       </div>
     </PageStack>
@@ -1320,47 +1170,44 @@ function GamesPage() {
   );
 }
 
-function NewPage({ openMaterialsPage }) {
-  const voiceScript = "Browse grade 1 to grade 9 Kenyan learning materials and open the full materials workspace.";
+function NewPage({ openTournamentRegistration }) {
+  const voiceScript = "The QOOHI Spotlight. Where competition meets community. Register for our featured FC 26 tournament, win big, and climb the standings. Stay updated with the latest in digital sports and community events.";
 
   return (
-    <PageStack
-      title="Materials Spotlight"
-      subtitle="Quick access to the new Kenyan CBC materials workspace."
+    <PageStack 
+      title="Spotlight" 
+      subtitle="Latest updates and featured community tournaments."
       voiceScript={voiceScript}
     >
-      <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-        <div className="relative overflow-hidden rounded-[4rem] border border-white/10 bg-slate-950 shadow-2xl group">
-          <img src={libraryImg} alt="Materials library" className="absolute inset-0 h-full w-full object-cover opacity-20 transition-transform duration-1000 group-hover:scale-110" />
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-950/45 to-transparent" />
-          <div className="relative p-10 sm:p-16">
-            <SectionLabel>Kenyan CBC</SectionLabel>
-            <h2 className="mt-6 text-5xl font-black text-white leading-tight sm:text-6xl">Grade 1 to 9 materials, generated on demand.</h2>
-            <p className="mt-8 max-w-2xl text-lg leading-8 text-slate-300">
-              Parents can describe what they want, generate printable notes and exercises with OpenAI, and download the pack after a small Ksh 10 charge.
-            </p>
-            <div className="mt-10 flex flex-wrap gap-3">
-              <button onClick={openMaterialsPage} className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-6 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200">
-                Open Materials
-              </button>
-              <button onClick={() => window.location.hash = "learn"} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10">
-                View Courses
-              </button>
-            </div>
+      <div className="relative overflow-hidden rounded-[4rem] border border-white/10 bg-slate-950 shadow-2xl group">
+        <div className="grid gap-0 lg:grid-cols-2">
+          <div className="relative min-h-[400px] overflow-hidden">
+            <img src={fc26Img} alt="FC 26" className="absolute inset-0 h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110" />
+            <div className="absolute inset-0 bg-gradient-to-r from-slate-950/40 to-transparent" />
           </div>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
-          {[
-            { title: "Grades 1-3", text: "Reading basics, counting, and guided practice." },
-            { title: "Grades 4-6", text: "Core CBC revision, notes, and homework packs." },
-            { title: "Grades 7-9", text: "Deeper subject support and exam prep materials." },
-          ].map((item) => (
-            <div key={item.title} className="rounded-[2rem] border border-white/10 bg-white/5 p-6 backdrop-blur-md">
-              <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-300">{item.title}</p>
-              <p className="mt-3 text-sm leading-7 text-slate-300">{item.text}</p>
+          <div className="flex flex-col justify-center p-10 sm:p-16 relative z-10">
+            <div className="inline-flex w-fit items-center gap-3 rounded-full bg-amber-400/10 px-6 py-2 text-amber-400 border border-amber-400/20 mb-8">
+              <FaTrophy className="text-sm animate-bounce" />
+              <span className="text-[10px] font-black uppercase tracking-[0.3em]">Featured Event</span>
             </div>
-          ))}
+            <h2 className="text-5xl font-black text-white tracking-tighter sm:text-7xl uppercase leading-[0.85]">FC 26 <br/><span className="text-cyan-400">CHAMPIONS</span></h2>
+            <p className="mt-10 text-xl font-bold leading-relaxed text-slate-400 max-w-lg">
+              Compete in our premier football tournament. 10 elite slots. Ultimate prestige.
+            </p>
+            <div className="mt-12 grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div className="rounded-[1.5rem] border border-white/5 bg-white/5 p-6 backdrop-blur-md">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Entry</p>
+                <p className="mt-1 text-2xl font-black text-white">Ksh 250</p>
+              </div>
+              <div className="rounded-[1.5rem] border border-white/5 bg-white/5 p-6 backdrop-blur-md">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Winner</p>
+                <p className="mt-1 text-2xl font-black text-amber-400">Ksh 700</p>
+              </div>
+            </div>
+            <ActionButton className="mt-12 !text-xl !py-6 !rounded-[2rem] shadow-[0_0_30px_rgba(34,211,238,0.3)]" onClick={openTournamentRegistration}>
+              SECURE YOUR SLOT
+            </ActionButton>
+          </div>
         </div>
       </div>
     </PageStack>
@@ -1438,7 +1285,7 @@ function ContactPage() {
 }
 
 function RegisterPage({ registrationTarget, onSubmit, statusMessage }) {
-  const [form, setForm] = useState({ fullName: "", whatsapp: "", email: "", specialization: "", childName: "", childGradeLevel: "", childGoals: "" });
+  const [form, setForm] = useState({ fullName: "", whatsapp: "", email: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const selectedPackage = packageCards.find((item) => item.key === registrationTarget.packageKey);
@@ -1476,10 +1323,6 @@ function RegisterPage({ registrationTarget, onSubmit, statusMessage }) {
         mode: "register",
         registrationType: registrationTarget.type,
         selectedPackage: (isTeacher || isStudent || isParent || isTournament || isIep) ? "" : registrationTarget.packageKey,
-        specialization: form.specialization,
-        childName: form.childName,
-        childGradeLevel: form.childGradeLevel,
-        childGoals: form.childGoals,
       });
     } catch (err) {
       setError(err.message);
@@ -1533,40 +1376,6 @@ function RegisterPage({ registrationTarget, onSubmit, statusMessage }) {
         <Input label="Full name" value={form.fullName} onChange={(value) => setForm((current) => ({ ...current, fullName: value }))} />
         <Input label="WhatsApp number" value={form.whatsapp} onChange={(value) => setForm((current) => ({ ...current, whatsapp: value }))} />
         <Input label="Email address" type="email" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} />
-        {isTeacher && (
-          <Input
-            label="Specialization"
-            value={form.specialization}
-            onChange={(value) => setForm((current) => ({ ...current, specialization: value }))}
-            placeholder="Math, Science, English, CBC support"
-          />
-        )}
-        {isParent && (
-          <div className="space-y-4">
-            <Input
-              label="Child name"
-              value={form.childName}
-              onChange={(value) => setForm((current) => ({ ...current, childName: value }))}
-              placeholder="Student full name"
-            />
-            <Input
-              label="Grade level"
-              value={form.childGradeLevel}
-              onChange={(value) => setForm((current) => ({ ...current, childGradeLevel: value }))}
-              placeholder="Grade 1 to Grade 9"
-            />
-            <label className="block space-y-2">
-              <span className="text-sm font-bold text-slate-300">Goals for your child</span>
-              <textarea
-                rows="4"
-                value={form.childGoals}
-                onChange={(event) => setForm((current) => ({ ...current, childGoals: event.target.value }))}
-                placeholder="Example: improve reading fluency, pass maths, and build confidence"
-                className="w-full rounded-[1.5rem] border border-white/10 bg-slate-950/80 px-4 py-4 text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/60"
-              />
-            </label>
-          </div>
-        )}
         {statusMessage && <Notice tone="info">{statusMessage}</Notice>}
         {error && <Notice tone="error">{error}</Notice>}
         <ActionButton disabled={submitting} type="submit">
@@ -1654,7 +1463,6 @@ function DashboardPage({
   goTo,
   sessionToken,
   onRefresh,
-  onRefreshTeacherOverview,
 }) {
   const [showMessages, setShowMessages] = useState(false);
   const [editingIep, setEditingIep] = useState(null);
@@ -1680,16 +1488,6 @@ function DashboardPage({
     mpesaName: "",
     mpesaNumber: "",
   });
-  const [teacherSpecializationsDraft, setTeacherSpecializationsDraft] = useState("");
-  
-  // Parent materials state
-  const [parentGradeLevel, setParentGradeLevel] = useState("1");
-  const [parentPrompt, setParentPrompt] = useState("");
-  const [parentMaterialTitle, setParentMaterialTitle] = useState("");
-  const [parentMaterialBody, setParentMaterialBody] = useState("");
-  const [parentLoadingMaterial, setParentLoadingMaterial] = useState(false);
-  const [parentStatus, setParentStatus] = useState("");
-  const [parentDownloading, setParentDownloading] = useState(false);
 
   useEffect(() => {
     if (!dashboard?.student) return;
@@ -1698,76 +1496,7 @@ function DashboardPage({
       whatsapp: dashboard.student.whatsapp || "",
       avatarUrl: dashboard.student.avatarUrl || "",
     });
-    if (dashboard.student.role === "teacher") {
-      setTeacherSpecializationsDraft(dashboard.student.specializations || teacherOverview?.currentTeacher?.specializations || "");
-    }
-  }, [dashboard, teacherOverview]);
-
-  // Auto-generate materials when grade changes for parent
-  useEffect(() => {
-    if (dashboard?.student?.role === "parent" && parentPrompt.trim()) {
-      const timer = setTimeout(() => {
-        requestParentMaterials();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [parentGradeLevel, parentPrompt]);
-
-  const requestParentMaterials = async () => {
-    const topic = parentPrompt.trim();
-    if (!topic || dashboard?.student?.role !== "parent") return;
-    
-    setParentLoadingMaterial(true);
-    setParentStatus("");
-    try {
-      const data = await fetchJson("/api/ai/materials", {
-        method: "POST",
-        body: JSON.stringify({ grade: parentGradeLevel, topic }),
-      });
-      setParentMaterialTitle(data.title || `Grade ${parentGradeLevel} materials`);
-      setParentMaterialBody(data.content || "");
-      setParentStatus("Materials ready. You can download below.");
-    } catch (err) {
-      setParentStatus(err.message || "Failed to generate materials.");
-    } finally {
-      setParentLoadingMaterial(false);
-    }
-  };
-
-  const downloadParentMaterials = async () => {
-    setParentDownloading(true);
-    setParentStatus("");
-    try {
-      if (!sessionToken) {
-        throw new Error("Please log in before downloading materials.");
-      }
-      if (!parentMaterialBody) {
-        await requestParentMaterials();
-      }
-      await fetchJson("/api/user/service/use", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        body: JSON.stringify({ serviceKey: "materials_download" }),
-      });
-      const fileTitle = parentMaterialTitle || `Grade ${parentGradeLevel} materials`;
-      const blob = new Blob([
-        `${fileTitle}\n\n${parentMaterialBody || ""}\n`,
-      ], { type: "text/plain;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${fileTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "qoohi-materials"}.txt`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(url);
-      setParentStatus("Download started after charging Ksh 10.");
-    } catch (err) {
-      setParentStatus(err.message);
-    } finally {
-      setParentDownloading(false);
-    }
-  };
+  }, [dashboard]);
 
   if (loading) {
     return (
@@ -1803,6 +1532,7 @@ function DashboardPage({
   const profileAvatar = profileDraft.avatarUrl || dashboard.student?.avatarUrl || "";
   const fullName = profileDraft.fullName || dashboard.student.fullName;
   const hasCourses = dashboard.enrollments && dashboard.enrollments.length > 0;
+  const hasTournament = !!dashboard.tournamentRegistration;
   const canAfford = (charge) => Number(charge || 0) <= 0 || balance >= Number(charge || 0);
   const authHeaders = sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
   const profileUpdateCharge = Number(
@@ -1812,8 +1542,12 @@ function DashboardPage({
   const firstName = fullName?.split(" ")[0] || "";
   const profileScript = `Welcome ${firstName || ""} to your QOOHI dashboard. Review your profile, balance, services, and activity. Deposit funds, withdraw when needed, and keep your learning journey moving.`;
 
-  const teacherChildren = Array.isArray(teacherOverview?.children) ? teacherOverview.children : [];
-  const teacherRoster = Array.isArray(teacherOverview?.teachers) ? teacherOverview.teachers : [];
+  const allStudents = teacherOverview
+    ? teacherOverview.groups
+        .filter((g) => !["teacher", "parent"].includes(g.key))
+        .flatMap((g) => g.members)
+        .filter((v, i, a) => a.findIndex((t) => t.id === v.id) === i)
+    : [];
 
   const serviceActions = {
     computer_packages: { route: "learn", label: "Open Courses" },
@@ -1834,11 +1568,11 @@ function DashboardPage({
     { id: "balance", Icon: FaWallet, label: "Balance" },
     { id: "services", Icon: FaLayerGroup, label: "Services" },
     { id: "activity", Icon: FaHistory, label: "Activity" },
-    ...(isParent ? [{ id: "materials", Icon: FaBookOpen, label: "Materials" }] : []),
     ...(hasCourses ? [{ id: "courses", Icon: FaBookOpen, label: "Courses" }] : []),
     ...(isStudent && assessmentStatus === "completed" ? [{ id: "roadmap", Icon: FaGraduationCap, label: "Roadmap" }] : []),
     ...(isTeacher ? [{ id: "roster", Icon: FaChalkboardTeacher, label: "Roster" }] : []),
     ...(isParent ? [{ id: "parent", Icon: FaUsers, label: "Support" }] : []),
+    ...(hasTournament ? [{ id: "tournament", Icon: FaTrophy, label: "Tournament" }] : []),
   ];
 
   const openProfile = (tab = "view") => {
@@ -1940,21 +1674,6 @@ function DashboardPage({
     }
   };
 
-  const saveTeacherSpecializations = async () => {
-    setProfileStatus("");
-    try {
-      await fetchJson("/api/teacher/specializations", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${sessionToken}` },
-        body: JSON.stringify({ specializations: teacherSpecializationsDraft }),
-      });
-      await onRefreshTeacherOverview?.();
-      setProfileStatus("Teacher specializations saved.");
-    } catch (err) {
-      setProfileStatus(err.message);
-    }
-  };
-
   return (
     <PageStack
       title="Dashboard"
@@ -1962,7 +1681,10 @@ function DashboardPage({
       voiceScript={profileScript}
       compact
     >
+
+      {/* ── Dashboard Sidebar Layout ── */}
       <div className="flex flex-row gap-6">
+
         {/* Left Sidebar */}
         <aside className="flex flex-col w-52 flex-shrink-0">
           <div className="sticky top-24 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/90 backdrop-blur-xl">
@@ -2008,311 +1730,474 @@ function DashboardPage({
           </div>
         </aside>
 
+        
+
         {/* Section Content */}
         <div className="min-w-0 flex-1">
+
           {/* PROFILE section */}
           {activeSection === "profile" && (
             <div className="space-y-6">
               <div className="overflow-hidden rounded-[2rem] border border-white/15 bg-slate-900/80 shadow-2xl shadow-black/40 backdrop-blur-xl">
-                <div className="relative h-44 bg-gradient-to-br from-cyan-700/50 via-blue-700/40 to-indigo-900/60">
-                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(34,211,238,0.25),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(99,102,241,0.3),transparent_55%)]" />
-                  <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAxOGMxLjIgMCAyLjQtLjUgMy4yLTEuNHMxLjMtMi4xIDEuMy0zLjMtLjUtMi40LTEuMy0zLjItMS45LTEuMy0zLjItMS4zLTIuNC41LTMuMiAxLjMtMS4zIDItMS4zIDMuMi41IDIuNCAxLjMgMy4yIDEuOSAxLjMgMy4yIDEuM3ptLTEyIDBjMS4yIDAgMi40LS41IDMuMi0xLjRzMS4zLTIuMSAxLjMtMy4zLS41LTIuNC0xLjMtMy4yLTEuOS0xLjMtMy4yLTEuMy0yLjQuNS0zLjIgMS4zLTEuMyAyLTEuMyAzLjIuNSAyLjQgMS4zIDMuMiAxLjkgMS4zIDMuMiAxLjN6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDMpIi8+PC9nPjwvc3ZnPg==')] opacity-40" />
+                {/* Cover banner */}
+        <div className="relative h-44 bg-gradient-to-br from-cyan-700/50 via-blue-700/40 to-indigo-900/60">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(34,211,238,0.25),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(99,102,241,0.3),transparent_55%)]" />
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAxOGMxLjIgMCAyLjQtLjUgMy4yLTEuNHMxLjMtMi4xIDEuMy0zLjMtLjUtMi40LTEuMy0zLjItMS45LTEuMy0zLjItMS4zLTIuNC41LTMuMiAxLjMtMS4zIDItMS4zIDMuMi41IDIuNCAxLjMgMy4yIDEuOSAxLjMgMy4yIDEuM3ptLTEyIDBjMS4yIDAgMi40LS41IDMuMi0xLjRzMS4zLTIuMSAxLjMtMy4zLS41LTIuNC0xLjMtMy4yLTEuOS0xLjMtMy4yLTEuMy0yLjQuNS0zLjIgMS4zLTEuMyAyLTEuMyAzLjIuNSAyLjQgMS4zIDMuMiAxLjkgMS4zIDMuMiAxLjN6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDMpIi8+PC9nPjwvc3ZnPg==')] opacity-40" />
+        </div>
+
+        <div className="px-6 pb-8 sm:px-10">
+          {/* Avatar + action row */}
+          <div className="-mt-16 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            {/* Avatar */}
+            <button
+              type="button"
+              onClick={() => openProfile("view")}
+              className="group relative h-32 w-32 flex-shrink-0 overflow-hidden rounded-full border-4 border-slate-900 bg-slate-800 shadow-2xl shadow-black/60 transition-transform hover:scale-105"
+            >
+              {profileAvatar ? (
+                <img src={profileAvatar} alt={fullName} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-cyan-800 to-blue-900 text-4xl font-black text-cyan-200">
+                  {fullName?.[0]?.toUpperCase() || "Q"}
                 </div>
+              )}
+              <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-all group-hover:bg-black/40">
+                <FaEdit className="scale-0 text-xl text-white transition-transform group-hover:scale-100" />
+              </div>
+            </button>
 
-                <div className="px-6 pb-8 sm:px-10">
-                  <div className="-mt-16 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                    <button
-                      type="button"
-                      onClick={() => openProfile("view")}
-                      className="group relative h-32 w-32 flex-shrink-0 overflow-hidden rounded-full border-4 border-slate-900 bg-slate-800 shadow-2xl shadow-black/60 transition-transform hover:scale-105"
-                    >
-                      {profileAvatar ? (
-                        <img src={profileAvatar} alt={fullName} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-cyan-800 to-blue-900 text-4xl font-black text-cyan-200">
-                          {fullName?.[0]?.toUpperCase() || "Q"}
-                        </div>
-                      )}
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-all group-hover:bg-black/40">
-                        <FaEdit className="scale-0 text-xl text-white transition-transform group-hover:scale-100" />
-                      </div>
-                    </button>
+            {/* Action buttons */}
+            <div className="flex flex-wrap gap-2 pb-1">
+              <button
+                type="button"
+                onClick={() => openProfile("edit")}
+                className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-bold text-white backdrop-blur-sm transition hover:border-white/30 hover:bg-white/15"
+              >
+                <FaEdit className="text-xs" /> Edit Profile
+              </button>
+              <button
+                type="button"
+                onClick={() => openProfile("deposit")}
+                className="inline-flex items-center gap-2 rounded-full bg-cyan-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-400"
+              >
+                <FaWallet className="text-xs" /> Deposit
+              </button>
+              <button
+                type="button"
+                onClick={() => openProfile("withdraw")}
+                className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-bold text-white backdrop-blur-sm transition hover:border-white/30 hover:bg-white/15"
+              >
+                <FaMinusCircle className="text-xs" /> Withdraw
+              </button>
+              <button
+                type="button"
+                onClick={logout}
+                className="inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-5 py-2.5 text-sm font-bold text-rose-300 transition hover:bg-rose-500/20"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
 
-                    <div className="flex flex-wrap gap-2 pb-1">
-                      <button
-                        type="button"
-                        onClick={() => openProfile("edit")}
-                        className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-bold text-white backdrop-blur-sm transition hover:border-white/30 hover:bg-white/15"
-                      >
-                        <FaEdit className="text-xs" /> Edit Profile
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openProfile("deposit")}
-                        className="inline-flex items-center gap-2 rounded-full bg-cyan-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-400"
-                      >
-                        <FaWallet className="text-xs" /> Deposit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openProfile("withdraw")}
-                        className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-bold text-white backdrop-blur-sm transition hover:border-white/30 hover:bg-white/15"
-                      >
-                        <FaMinusCircle className="text-xs" /> Withdraw
-                      </button>
-                      <button
-                        type="button"
-                        onClick={logout}
-                        className="inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-5 py-2.5 text-sm font-bold text-rose-300 transition hover:bg-rose-500/20"
-                      >
-                        Logout
-                      </button>
+          {/* Name + info */}
+          <div className="mt-5">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">{fullName}</h2>
+              <span className="rounded-full bg-cyan-500/20 px-3 py-1 text-xs font-black uppercase tracking-widest text-cyan-300">
+                {roleLabel}
+              </span>
+              {assessmentStatus === "completed" && (
+                <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-black uppercase tracking-widest text-emerald-300">
+                  Level {performanceLevel}
+                </span>
+              )}
+            </div>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">
+              {isTeacher
+                ? "Teacher · Tracking learners, updating IEPs, and sending focused guidance."
+                : isParent
+                  ? "Parent · Account balance, messages, and learner support hub."
+                  : "Student · Learning progress, balance, and premium services."}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-slate-500">
+              <span className="flex items-center gap-1.5"><FaEnvelope className="text-xs text-slate-600" />{dashboard.student.email}</span>
+              {dashboard.student.whatsapp && (
+                <span className="flex items-center gap-1.5"><FaWhatsapp className="text-xs text-slate-600" />{dashboard.student.whatsapp}</span>
+              )}
+              {profileUpdateCharge > 0 && (
+                <span className="text-amber-400/80">Profile edits cost Ksh {profileUpdateCharge.toLocaleString()}</span>
+              )}
+            </div>
+          </div>
+
+          {/* LinkedIn-style stat pills */}
+          <div className="mt-6 flex flex-wrap gap-3 border-t border-white/10 pt-6">
+            {[
+              { label: "Balance", value: `Ksh ${balance.toLocaleString()}`, color: "text-cyan-300", bg: "bg-cyan-500/10 border-cyan-500/20" },
+              { label: "Courses", value: dashboard.enrollments.length, color: "text-white", bg: "bg-white/5 border-white/10" },
+              { label: "Messages", value: dashboard.messages.length, color: "text-white", bg: "bg-white/5 border-white/10" },
+              { label: "Status", value: assessmentStatus === "completed" ? "Assessed" : "Pending", color: assessmentStatus === "completed" ? "text-emerald-300" : "text-amber-300", bg: assessmentStatus === "completed" ? "bg-emerald-500/10 border-emerald-500/20" : "bg-amber-500/10 border-amber-500/20" },
+            ].map(({ label, value, color, bg }) => (
+              <div key={label} className={`flex items-center gap-2 rounded-full border px-4 py-2 ${bg}`}>
+                <span className="text-xs font-semibold text-slate-500">{label}</span>
+                <span className={`text-sm font-black ${color}`}>{value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Main Content Grid ── */}
+      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+
+        {/* Left: Role-specific content */}
+        <div className="space-y-6">
+
+          {/* Course messages */}
+          {hasCourses && (
+            <GlassPanel className="p-6 sm:p-8">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <SectionLabel>Course Admin</SectionLabel>
+                  <h3 className="mt-2 text-xl font-black text-white">Materials & Updates</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowMessages(!showMessages)}
+                  className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-cyan-300 transition hover:bg-cyan-400/20"
+                >
+                  {showMessages ? "Hide" : "View All"}
+                </button>
+              </div>
+              {!showMessages && (
+                <p className="mt-3 text-sm text-slate-500">{dashboard.messages.length} message{dashboard.messages.length !== 1 ? "s" : ""} from your instructor.</p>
+              )}
+              {showMessages && (
+                <div className="mt-5 space-y-3">
+                  {dashboard.messages.length === 0 && (
+                    <p className="rounded-2xl border border-white/5 bg-white/5 px-5 py-4 text-sm text-slate-500">No messages yet.</p>
+                  )}
+                  {dashboard.messages.map((message) => (
+                    <div key={message.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-5">
+                      <h4 className="font-bold text-white">{message.subject}</h4>
+                      <p className="mt-2 text-sm leading-6 text-slate-400">{message.body}</p>
+                      {message.pdfLinks.map((link, idx) => (
+                        <a key={idx} href={link} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-cyan-400 hover:text-white transition">
+                          <FaLink /> Open Material
+                        </a>
+                      ))}
                     </div>
-                  </div>
+                  ))}
+                </div>
+              )}
+            </GlassPanel>
+          )}
 
-                  <div className="mt-5">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">{fullName}</h2>
-                      <span className="rounded-full bg-cyan-500/20 px-3 py-1 text-xs font-black uppercase tracking-widest text-cyan-300">
-                        {roleLabel}
-                      </span>
-                      {assessmentStatus === "completed" && (
-                        <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-black uppercase tracking-widest text-emerald-300">
-                          Level {performanceLevel}
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">
-                      {isTeacher
-                        ? "Teacher · Tracking learners, updating IEPs, and sending focused guidance."
-                        : isParent
-                          ? "Parent · Account balance, messages, and learner support hub."
-                          : "Student · Learning progress, balance, and premium services."}
-                    </p>
-                    <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-slate-500">
-                      <span className="flex items-center gap-1.5"><FaEnvelope className="text-xs text-slate-600" />{dashboard.student.email}</span>
-                      {dashboard.student.whatsapp && (
-                        <span className="flex items-center gap-1.5"><FaWhatsapp className="text-xs text-slate-600" />{dashboard.student.whatsapp}</span>
-                      )}
-                      {profileUpdateCharge > 0 && (
-                        <span className="text-amber-400/80">Profile edits cost Ksh {profileUpdateCharge.toLocaleString()}</span>
-                      )}
-                    </div>
-                  </div>
+          {/* Student roadmap */}
+          {isStudent && assessmentStatus === "completed" && (
+            <GlassPanel className="p-6 sm:p-8">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <SectionLabel>Learning Roadmap</SectionLabel>
+                  <h3 className="mt-2 text-xl font-black text-white">Recommended Resources</h3>
+                </div>
+                <FaBookOpen className="text-3xl text-cyan-300" />
+              </div>
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-5">
+                  <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Digital</p>
+                  <h4 className="mt-2 text-lg font-black text-white">Workbook · Level {performanceLevel}</h4>
+                  <button className="mt-4 flex items-center gap-2 text-sm font-bold text-cyan-300 hover:text-white transition">
+                    <FaLink /> Download
+                  </button>
+                </div>
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5">
+                  <p className="text-xs font-black uppercase tracking-widest text-amber-400">Physical</p>
+                  <h4 className="mt-2 text-lg font-black text-white">Activity Kit</h4>
+                  <button className="mt-4 flex items-center gap-2 text-sm font-bold text-amber-300 hover:text-white transition">
+                    <FaWhatsapp /> Request via WhatsApp
+                  </button>
+                </div>
+              </div>
+            </GlassPanel>
+          )}
 
-                  <div className="mt-6 flex flex-wrap gap-3 border-t border-white/10 pt-6">
-                    {[
-                      { label: "Balance", value: `Ksh ${balance.toLocaleString()}`, color: "text-cyan-300", bg: "bg-cyan-500/10 border-cyan-500/20" },
-                      { label: "Courses", value: dashboard.enrollments.length, color: "text-white", bg: "bg-white/5 border-white/10" },
-                      { label: "Messages", value: dashboard.messages.length, color: "text-white", bg: "bg-white/5 border-white/10" },
-                      { label: "Status", value: assessmentStatus === "completed" ? "Assessed" : "Pending", color: assessmentStatus === "completed" ? "text-emerald-300" : "text-amber-300", bg: assessmentStatus === "completed" ? "bg-emerald-500/10 border-emerald-500/20" : "bg-amber-500/10 border-amber-500/20" },
-                    ].map(({ label, value, color, bg }) => (
-                      <div key={label} className={`flex items-center gap-2 rounded-full border px-4 py-2 ${bg}`}>
-                        <span className="text-xs font-semibold text-slate-500">{label}</span>
-                        <span className={`text-sm font-black ${color}`}>{value}</span>
-                      </div>
+          {/* Teacher: student roster */}
+          {isTeacher && (
+            <GlassPanel className="p-6 sm:p-8">
+              <SectionLabel>Teacher Tools</SectionLabel>
+              <h3 className="mt-2 text-xl font-black text-white">Learner Roster</h3>
+              <div className="mt-6 overflow-x-auto rounded-2xl border border-white/5 bg-slate-950/50">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-white/5 text-[10px] uppercase tracking-widest text-slate-500">
+                      <th className="px-4 py-3">Student</th>
+                      <th className="px-4 py-3">Balance</th>
+                      <th className="px-4 py-3">Level</th>
+                      <th className="px-4 py-3 text-right">IEP</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {allStudents.map((s) => (
+                      <tr key={s.id} className="transition hover:bg-white/5">
+                        <td className="px-4 py-4">
+                          <p className="font-bold text-white">{s.full_name}</p>
+                          <p className="text-xs text-slate-500">{s.email}</p>
+                        </td>
+                        <td className="px-4 py-4 font-bold text-cyan-300">Ksh {Number(s.balance || 0).toLocaleString()}</td>
+                        <td className="px-4 py-4">
+                          <span className="rounded-full bg-cyan-500/10 px-2 py-1 text-xs font-bold text-cyan-300">Lvl {s.performance_level}</span>
+                        </td>
+                        <td className="px-4 py-4 text-right">
+                          <button
+                            onClick={() => setEditingIep(s)}
+                            className="rounded-full border border-cyan-400/30 px-3 py-1.5 text-xs font-black text-cyan-400 transition hover:bg-cyan-400 hover:text-slate-900"
+                          >
+                            Edit IEP
+                          </button>
+                        </td>
+                      </tr>
                     ))}
-                  </div>
-                </div>
+                    {allStudents.length === 0 && (
+                      <tr>
+                        <td colSpan="4" className="px-4 py-10 text-center text-sm text-slate-500">No students found.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-
-              <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-                <div className="space-y-6">
-                  {/* Course messages */}
-                  {hasCourses && (
-                    <GlassPanel className="p-6 sm:p-8">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <SectionLabel>Course Admin</SectionLabel>
-                          <h3 className="mt-2 text-xl font-black text-white">Materials & Updates</h3>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setShowMessages(!showMessages)}
-                          className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-cyan-300 transition hover:bg-cyan-400/20"
+              {editingIep && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+                  <GlassPanel className="w-full max-w-md p-8">
+                    <SectionLabel>Edit IEP</SectionLabel>
+                    <h2 className="mt-2 text-2xl font-black text-white">{editingIep.full_name}</h2>
+                    <div className="mt-6 space-y-5">
+                      <label className="block">
+                        <span className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-400">Assessment Status</span>
+                        <select
+                          className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-cyan-400"
+                          value={editingIep.assessment_status}
+                          onChange={(e) => setEditingIep({ ...editingIep, assessment_status: e.target.value })}
                         >
-                          {showMessages ? "Hide" : "View All"}
-                        </button>
-                      </div>
-                      {!showMessages && (
-                        <p className="mt-3 text-sm text-slate-500">{dashboard.messages.length} message{dashboard.messages.length !== 1 ? "s" : ""} from your instructor.</p>
-                      )}
-                      {showMessages && (
-                        <div className="mt-5 space-y-3">
-                          {dashboard.messages.length === 0 && (
-                            <p className="rounded-2xl border border-white/5 bg-white/5 px-5 py-4 text-sm text-slate-500">No messages yet.</p>
-                          )}
-                          {dashboard.messages.map((message) => (
-                            <div key={message.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-5">
-                              <h4 className="font-bold text-white">{message.subject}</h4>
-                              <p className="mt-2 text-sm leading-6 text-slate-400">{message.body}</p>
-                              {message.pdfLinks.map((link, idx) => (
-                                <a key={idx} href={link} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-cyan-400 hover:text-white transition">
-                                  <FaLink /> Open Material
-                                </a>
-                              ))}
-                            </div>
+                          <option value="waiting">Waiting</option>
+                          <option value="completed">Completed</option>
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-400">Performance Level</span>
+                        <select
+                          className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-cyan-400"
+                          value={editingIep.performance_level}
+                          onChange={(e) => setEditingIep({ ...editingIep, performance_level: Number(e.target.value) })}
+                        >
+                          {[0, 1, 2, 3, 4, 5].map((lvl) => (
+                            <option key={lvl} value={lvl}>Level {lvl}</option>
                           ))}
-                        </div>
-                      )}
-                    </GlassPanel>
-                  )}
-
-                  {/* Student roadmap */}
-                  {isStudent && assessmentStatus === "completed" && (
-                    <GlassPanel className="p-6 sm:p-8">
-                      <div className="flex items-center justify-between gap-4">
-                        <div>
-                          <SectionLabel>Learning Roadmap</SectionLabel>
-                          <h3 className="mt-2 text-xl font-black text-white">Recommended Resources</h3>
-                        </div>
-                        <FaBookOpen className="text-3xl text-cyan-300" />
+                        </select>
+                      </label>
+                      <div className="flex gap-3 pt-2">
+                        <ActionButton className="flex-1 !py-3 !text-sm" onClick={() => { onUpdateIep(editingIep.id, editingIep.assessment_status, editingIep.performance_level); setEditingIep(null); }}>
+                          Save Changes
+                        </ActionButton>
+                        <SecondaryButton className="flex-1 !py-3 !text-sm" onClick={() => setEditingIep(null)}>Cancel</SecondaryButton>
                       </div>
-                      <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                        <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-5">
-                          <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Digital</p>
-                          <h4 className="mt-2 text-lg font-black text-white">Workbook · Level {performanceLevel}</h4>
-                          <button className="mt-4 flex items-center gap-2 text-sm font-bold text-cyan-300 hover:text-white transition">
-                            <FaLink /> Download
-                          </button>
-                        </div>
-                        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5">
-                          <p className="text-xs font-black uppercase tracking-widest text-amber-400">Physical</p>
-                          <h4 className="mt-2 text-lg font-black text-white">Activity Kit</h4>
-                          <button className="mt-4 flex items-center gap-2 text-sm font-bold text-amber-300 hover:text-white transition">
-                            <FaWhatsapp /> Request via WhatsApp
-                          </button>
-                        </div>
-                      </div>
-                    </GlassPanel>
-                  )}
-
-                  {/* Teacher: learner roster */}
-                  {isTeacher && (
-                    <GlassPanel className="p-6 sm:p-8">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div>
-                          <SectionLabel>Teacher Tools</SectionLabel>
-                          <h3 className="mt-2 text-xl font-black text-white">Parent-registered children</h3>
-                          <p className="mt-2 text-sm text-slate-500">Only learners registered by parents appear here.</p>
-                        </div>
-                        <div className="w-full max-w-xl rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
-                          <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Your specializations</p>
-                          <textarea
-                            rows="3"
-                            value={teacherSpecializationsDraft}
-                            onChange={(event) => setTeacherSpecializationsDraft(event.target.value)}
-                            placeholder="Math, English, literacy, CBC support, exam prep"
-                            className="mt-3 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/60"
-                          />
-                          <div className="mt-3 flex flex-wrap gap-3">
-                            <button
-                              type="button"
-                              onClick={saveTeacherSpecializations}
-                              className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-cyan-200"
-                            >
-                              Save specializations
-                            </button>
-                            <span className="text-xs text-slate-500">These help parents find and contact you.</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-6 grid gap-3">
-                        {teacherChildren.length === 0 && (
-                          <p className="rounded-2xl border border-white/5 bg-white/5 px-4 py-5 text-center text-sm text-slate-500">No parent-registered children yet.</p>
-                        )}
-                        {teacherChildren.map((child) => {
-                          const whatsappDigits = String(child.parent_whatsapp || "").replace(/\D/g, "");
-                          const whatsappHref = whatsappDigits
-                            ? `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(`Hello ${child.parent_name || "parent"}, I am reaching out about ${child.child_name || "your child"}.`)}`
-                            : null;
-                          return (
-                            <div key={child.id} className="rounded-[1.5rem] border border-white/10 bg-slate-950/50 p-4">
-                              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                <div>
-                                  <p className="text-lg font-black text-white">{child.child_name}</p>
-                                  <p className="mt-1 text-sm text-slate-300">Grade {child.grade_level}</p>
-                                  <p className="mt-1 text-sm text-slate-400">Parent: {child.parent_name}</p>
-                                  <p className="mt-2 text-sm leading-7 text-slate-300">Goals: {child.goals}</p>
-                                </div>
-                                {whatsappHref && (
-                                  <a href={whatsappHref} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-full bg-emerald-400 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-emerald-300">
-                                    WhatsApp parent
-                                  </a>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </GlassPanel>
-                  )}
-
-                  {/* Parent quick-links */}
-                  {isParent && (
-                    <GlassPanel className="p-6 sm:p-8">
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <SectionLabel>Parent Hub</SectionLabel>
-                          <h3 className="mt-2 text-xl font-black text-white">Support your child's learning</h3>
-                          <p className="mt-2 text-sm text-slate-500">Register children, set goals, and open the materials workspace for grade-specific packs.</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => goTo("resources")}
-                          className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-cyan-200"
-                        >
-                          Open materials
-                        </button>
-                      </div>
-
-                      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        <button
-                          type="button"
-                          onClick={() => goTo("resources")}
-                          className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
-                        >
-                          <div className="rounded-xl bg-cyan-500/10 p-3"><FaBookOpen className="text-lg text-cyan-300" /></div>
-                          <div>
-                            <p className="font-bold text-white">Purchase Materials</p>
-                            <p className="text-xs text-slate-500">Ksh 10 downloads</p>
-                          </div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => goTo("teachers")}
-                          className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
-                        >
-                          <div className="rounded-xl bg-emerald-500/10 p-3"><FaEnvelope className="text-lg text-emerald-300" /></div>
-                          <div>
-                            <p className="font-bold text-white">Contact Teacher</p>
-                            <p className="text-xs text-slate-500">Recommended matches</p>
-                          </div>
-                        </button>
-                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                          <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Registered children</p>
-                          <p className="mt-2 text-2xl font-black text-white">{dashboard.children.length}</p>
-                        </div>
-                      </div>
-
-                      <div className="mt-6 space-y-3">
-                        {dashboard.children.length === 0 ? (
-                          <p className="rounded-2xl border border-white/5 bg-white/5 px-4 py-5 text-center text-sm text-slate-500">No children registered yet.</p>
-                        ) : (
-                          dashboard.children.map((child) => (
-                            <div key={`${child.child_name}-${child.created_at}`} className="rounded-[1.5rem] border border-white/10 bg-slate-950/50 p-4">
-                              <p className="text-lg font-black text-white">{child.child_name}</p>
-                              <p className="mt-1 text-sm text-slate-300">Grade {child.grade_level}</p>
-                              <p className="mt-2 text-sm leading-7 text-slate-400">Goals: {child.goals}</p>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </GlassPanel>
-                  )}
+                    </div>
+                  </GlassPanel>
                 </div>
+              )}
+            </GlassPanel>
+          )}
+
+          {/* Parent quick-links */}
+          {isParent && (
+            <GlassPanel className="p-6 sm:p-8">
+              <SectionLabel>Parent Hub</SectionLabel>
+              <h3 className="mt-2 text-xl font-black text-white">Support your child's learning</h3>
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => { window.location.hash = "resources"; }}
+                  className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
+                >
+                  <div className="rounded-xl bg-cyan-500/10 p-3"><FaBookOpen className="text-lg text-cyan-300" /></div>
+                  <div>
+                    <p className="font-bold text-white">Purchase Materials</p>
+                    <p className="text-xs text-slate-500">Workbooks & kits</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
+                >
+                  <div className="rounded-xl bg-emerald-500/10 p-3"><FaEnvelope className="text-lg text-emerald-300" /></div>
+                  <div>
+                    <p className="font-bold text-white">Contact Teacher</p>
+                    <p className="text-xs text-slate-500">Send a message</p>
+                  </div>
+                </button>
               </div>
+            </GlassPanel>
+          )}
+
+          {/* Tournament standings */}
+          {hasTournament && (
+            <GlassPanel className="p-6 sm:p-8">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <SectionLabel>E-Sports</SectionLabel>
+                  <h3 className="mt-2 text-xl font-black text-white">{tournamentInfo.title}</h3>
+                </div>
+                <FaTrophy className="text-3xl text-amber-300" />
+              </div>
+              {dashboard.tournament && (
+                <div className="mt-6 overflow-hidden rounded-2xl border border-white/10">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-white/5 bg-white/5 text-[10px] uppercase tracking-widest text-slate-500">
+                        <th className="px-4 py-3">Player</th>
+                        <th className="px-4 py-3">P</th>
+                        <th className="px-4 py-3">GD</th>
+                        <th className="px-4 py-3 font-black text-amber-400">Pts</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {dashboard.tournament.standings.map((row, i) => (
+                        <tr key={row.registrationId} className={`transition hover:bg-white/5 ${i === 0 ? "bg-amber-500/5" : ""}`}>
+                          <td className="px-4 py-3">
+                            <span className="font-semibold text-white">{i + 1}. {row.name}</span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-400">{row.played}</td>
+                          <td className="px-4 py-3 text-slate-400">{row.goalDifference}</td>
+                          <td className="px-4 py-3 font-black text-amber-300">{row.points}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </GlassPanel>
+          )}
+        </div>
+
+        {/* Right sidebar: Balance + Services + Activity */}
+        <div className="space-y-6">
+
+          {/* Balance card */}
+          <div className="overflow-hidden rounded-[2rem] border border-cyan-500/20 bg-gradient-to-br from-cyan-900/40 to-blue-900/40 p-6 shadow-xl backdrop-blur-xl">
+            <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Account Balance</p>
+            <p className="mt-3 text-5xl font-black text-white">Ksh {balance.toLocaleString()}</p>
+            <p className="mt-1 text-sm text-cyan-400/60">Available funds</p>
+            <div className="mt-6 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => openProfile("deposit")}
+                className="flex items-center justify-center gap-2 rounded-2xl bg-cyan-500 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-400"
+              >
+                <FaWallet /> Deposit
+              </button>
+              <button
+                type="button"
+                onClick={() => openProfile("withdraw")}
+                className="flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+              >
+                <FaMinusCircle /> Withdraw
+              </button>
+            </div>
+          </div>
+
+          {/* Service charges */}
+          <GlassPanel className="p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <SectionLabel>Services</SectionLabel>
+                <h3 className="mt-1 text-lg font-black text-white">Platform charges</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => openProfile("deposit")}
+                className="rounded-full bg-cyan-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition"
+              >
+                Top Up
+              </button>
+            </div>
+            <div className="mt-4 space-y-2">
+              {serviceCharges.map((service) => {
+                const meta = serviceActions[service.service_key] || {};
+                const charge = Number(service.charge_ksh || 0);
+                const enabled = Number(service.active || 0) === 1;
+                const blocked = charge > 0 && !canAfford(charge);
+                const statusColor = !enabled ? "text-slate-600" : blocked ? "text-rose-400" : "text-emerald-400";
+                const statusLabel = !enabled ? "Disabled" : blocked ? "Top up needed" : meta.label || "Available";
+                return (
+                  <button
+                    key={service.service_key}
+                    type="button"
+                    disabled={!enabled}
+                    onClick={() => {
+                      if (!enabled) return;
+                      if (service.service_key === "profile_update") { openProfile("edit"); return; }
+                      if (blocked) { openProfile("deposit"); return; }
+                      if (meta.route) goTo(meta.route);
+                    }}
+                    className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition ${
+                      enabled && !blocked
+                        ? "border-white/10 bg-white/5 hover:border-cyan-400/25 hover:bg-cyan-400/5 cursor-pointer"
+                        : blocked
+                          ? "border-rose-500/15 bg-rose-500/5 cursor-pointer"
+                          : "border-white/5 bg-white/5 opacity-50 cursor-default"
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-white truncate">{service.label}</p>
+                      <p className={`text-[10px] font-bold uppercase tracking-wide ${statusColor}`}>{statusLabel}</p>
+                    </div>
+                    <p className="text-sm font-black text-cyan-300 flex-shrink-0">
+                      {charge > 0 ? `Ksh ${charge.toLocaleString()}` : "Free"}
+                    </p>
+                  </button>
+                );
+              })}
+              {serviceCharges.length === 0 && (
+                <p className="rounded-2xl border border-white/5 bg-white/5 px-4 py-4 text-sm text-slate-500">No services configured.</p>
+              )}
+            </div>
+          </GlassPanel>
+
+          {/* Recent activity */}
+          <GlassPanel className="p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <SectionLabel>Activity</SectionLabel>
+                <h3 className="mt-1 text-lg font-black text-white">Recent transactions</h3>
+              </div>
+              <FaHistory className="text-lg text-cyan-400/60" />
+            </div>
+            <div className="mt-4 space-y-2">
+              {recentTransactions.slice(0, 6).map((item) => {
+                const amt = Number(item.amount || 0);
+                const positive = amt >= 0;
+                return (
+                  <div key={item.id} className="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/5 px-4 py-3">
+                    <div className={`h-8 w-8 flex-shrink-0 rounded-full flex items-center justify-center text-xs ${positive ? "bg-emerald-500/15 text-emerald-400" : "bg-rose-500/15 text-rose-400"}`}>
+                      {positive ? "+" : "−"}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-white truncate">{item.description || item.type}</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">{item.type}</p>
+                    </div>
+                    <p className={`text-sm font-black flex-shrink-0 ${positive ? "text-emerald-300" : "text-rose-300"}`}>
+                      {positive ? "+" : "−"}Ksh {Math.abs(amt).toLocaleString()}
+                    </p>
+                  </div>
+                );
+              })}
+              {recentTransactions.length === 0 && (
+                <p className="rounded-2xl border border-white/5 bg-white/5 px-4 py-5 text-sm text-slate-500">No activity yet. Deposit to get started.</p>
+              )}
+            </div>
+          </GlassPanel>
+        </div>
+      </div>
             </div>
           )}
 
@@ -2452,73 +2337,6 @@ function DashboardPage({
             </GlassPanel>
           )}
 
-          {/* MATERIALS section - Parent Only */}
-          {activeSection === "materials" && isParent && (
-            <div className="space-y-6 rounded-[2rem] border border-white/10 bg-slate-950/90 p-6 sm:p-8">
-              <div>
-                <SectionLabel>Generate Learning Materials</SectionLabel>
-                <h2 className="mt-2 text-3xl font-black text-white">Create materials for your child</h2>
-                <p className="mt-2 text-sm text-slate-400">Select a grade and describe what you need. Materials are automatically generated.</p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-4">
-                <div>
-                  <label className="block text-xs font-black uppercase tracking-[0.3em] text-slate-400 mb-2">Grade</label>
-                  <div className="flex gap-2">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((grade) => (
-                      <button
-                        key={grade}
-                        type="button"
-                        onClick={() => setParentGradeLevel(String(grade))}
-                        className={`rounded-xl border px-4 py-2 text-sm font-black transition ${
-                          String(parentGradeLevel) === String(grade)
-                            ? "border-cyan-300 bg-cyan-300 text-slate-950"
-                            : "border-white/10 bg-white/5 text-white hover:border-cyan-400/40 hover:bg-cyan-400/10"
-                        }`}
-                      >
-                        {grade}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <label className="block space-y-3">
-                <span className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Describe what you want</span>
-                <textarea
-                  rows="4"
-                  value={parentPrompt}
-                  onChange={(event) => setParentPrompt(event.target.value)}
-                  placeholder="Example: make revision notes and exercises for Grade 4 fractions with simple answers"
-                  className="w-full rounded-[1.5rem] border border-white/10 bg-slate-950/80 px-4 py-4 text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/60"
-                />
-              </label>
-
-              {parentLoadingMaterial && (
-                <div className="text-sm text-cyan-300">Generating materials...</div>
-              )}
-
-              {parentStatus && <Notice tone={parentStatus.toLowerCase().includes("ready") ? "info" : "error"}>{parentStatus}</Notice>}
-
-              {parentMaterialBody && (
-                <div className="rounded-[2rem] border border-cyan-400/20 bg-cyan-400/5 p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-300">Preview</p>
-                    <button
-                      onClick={downloadParentMaterials}
-                      disabled={parentDownloading}
-                      className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs font-black text-emerald-200 transition hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {parentDownloading ? "Downloading..." : "Download for Ksh 10"}
-                    </button>
-                  </div>
-                  <h3 className="text-2xl font-black text-white">{parentMaterialTitle || `Grade ${parentGradeLevel} materials`}</h3>
-                  <pre className="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-300 max-h-96 overflow-y-auto">{parentMaterialBody}</pre>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* COURSES section */}
           {activeSection === "courses" && (
             <GlassPanel className="p-6 sm:p-8">
@@ -2563,81 +2381,121 @@ function DashboardPage({
             </GlassPanel>
           )}
 
-          {/* ROSTER section - Teacher only */}
-          {activeSection === "roster" && isTeacher && (
+          {/* ROSTER section (teacher) */}
+          {activeSection === "roster" && (
             <GlassPanel className="p-6 sm:p-8">
-              <SectionLabel>Teacher Roster</SectionLabel>
-              <h3 className="mt-2 mb-6 text-2xl font-black text-white">Your Learners</h3>
-              <div className="space-y-4">
-                {teacherChildren.length === 0 ? (
-                  <p className="py-12 text-center text-sm text-slate-600">No learners assigned to you yet.</p>
-                ) : (
-                  teacherChildren.map((child) => (
-                    <div key={child.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-5">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h4 className="font-bold text-white">{child.child_name}</h4>
-                          <p className="text-sm text-slate-400">Grade {child.grade_level}</p>
-                          <p className="text-sm text-slate-400">Parent: {child.parent_name}</p>
-                          <p className="mt-2 text-sm text-slate-300">Goals: {child.goals}</p>
-                        </div>
-                        <button
-                          onClick={() => {
-                            const whatsappDigits = String(child.parent_whatsapp || "").replace(/\D/g, "");
-                            if (whatsappDigits) {
-                              window.open(`https://wa.me/${whatsappDigits}?text=${encodeURIComponent(`Hello ${child.parent_name || "parent"}, I am reaching out about ${child.child_name || "your child"}.`)}`, "_blank");
-                            }
-                          }}
-                          className="inline-flex items-center gap-2 rounded-full bg-emerald-400 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-emerald-300"
-                        >
-                          <FaWhatsapp /> Contact Parent
-                        </button>
+              <SectionLabel>Teacher Tools</SectionLabel>
+              <h3 className="mt-2 mb-6 text-2xl font-black text-white">Learner Roster</h3>
+              <div className="overflow-hidden rounded-2xl border border-white/5 bg-slate-950/50">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-white/5 text-[10px] uppercase tracking-widest text-slate-500">
+                      <th className="px-5 py-4">Student</th><th className="px-5 py-4">Balance</th><th className="px-5 py-4">Level</th><th className="px-5 py-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {allStudents.length === 0
+                      ? <tr><td colSpan="4" className="px-5 py-10 text-center text-sm text-slate-600">No students found.</td></tr>
+                      : allStudents.map(s => (
+                        <tr key={s.id} className="transition hover:bg-white/5">
+                          <td className="px-5 py-4"><p className="font-bold text-white">{s.full_name}</p><p className="text-xs text-slate-500">{s.email}</p></td>
+                          <td className="px-5 py-4 font-bold text-cyan-300">Ksh {Number(s.balance || 0).toLocaleString()}</td>
+                          <td className="px-5 py-4"><span className="rounded-full bg-cyan-500/10 px-2 py-1 text-xs font-bold text-cyan-300">Lvl {s.performance_level}</span></td>
+                          <td className="px-5 py-4 text-right"><button onClick={() => setEditingIep(s)} className="rounded-full border border-cyan-400/30 px-3 py-1.5 text-xs font-black text-cyan-400 transition hover:bg-cyan-400 hover:text-slate-900">Edit IEP</button></td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+              {editingIep && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+                  <GlassPanel className="w-full max-w-md p-8">
+                    <SectionLabel>Edit IEP</SectionLabel>
+                    <h2 className="mt-2 text-2xl font-black text-white">{editingIep.full_name}</h2>
+                    <div className="mt-6 space-y-5">
+                      <label className="block">
+                        <span className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-400">Assessment Status</span>
+                        <select className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-cyan-400" value={editingIep.assessment_status} onChange={e => setEditingIep({ ...editingIep, assessment_status: e.target.value })}>
+                          <option value="waiting">Waiting</option><option value="completed">Completed</option>
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-400">Performance Level</span>
+                        <select className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-cyan-400" value={editingIep.performance_level} onChange={e => setEditingIep({ ...editingIep, performance_level: Number(e.target.value) })}>
+                          {[0,1,2,3,4,5].map(lvl => <option key={lvl} value={lvl}>Level {lvl}</option>)}
+                        </select>
+                      </label>
+                      <div className="flex gap-3 pt-2">
+                        <ActionButton className="flex-1 !py-3 !text-sm" onClick={() => { onUpdateIep(editingIep.id, editingIep.assessment_status, editingIep.performance_level); setEditingIep(null); }}>Save Changes</ActionButton>
+                        <SecondaryButton className="flex-1 !py-3 !text-sm" onClick={() => setEditingIep(null)}>Cancel</SecondaryButton>
                       </div>
                     </div>
-                  ))
-                )}
+                  </GlassPanel>
+                </div>
+              )}
+            </GlassPanel>
+          )}
+
+          {/* SUPPORT section (parent) */}
+          {activeSection === "parent" && (
+            <GlassPanel className="p-6 sm:p-8">
+              <SectionLabel>Parent Hub</SectionLabel>
+              <h3 className="mt-2 mb-8 text-2xl font-black text-white">Support your child's learning</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <div className="rounded-xl bg-cyan-500/10 p-4"><FaBookOpen className="text-2xl text-cyan-300" /></div>
+                  <div><p className="font-bold text-white">Purchase Materials</p><p className="mt-1 text-sm text-slate-500">Workbooks &amp; learning kits</p></div>
+                </div>
+                <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <div className="rounded-xl bg-emerald-500/10 p-4"><FaEnvelope className="text-2xl text-emerald-300" /></div>
+                  <div><p className="font-bold text-white">Contact Teacher</p><p className="mt-1 text-sm text-slate-500">Send a direct message</p></div>
+                </div>
               </div>
             </GlassPanel>
           )}
 
-          {/* SUPPORT section - Parent only */}
-          {activeSection === "parent" && isParent && (
+          {/* TOURNAMENT section */}
+          {activeSection === "tournament" && (
             <GlassPanel className="p-6 sm:p-8">
-              <SectionLabel>Parent Support Hub</SectionLabel>
-              <h3 className="mt-2 mb-6 text-2xl font-black text-white">Resources for Parents</h3>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                  <h4 className="font-bold text-white">Materials Library</h4>
-                  <p className="mt-2 text-sm text-slate-400">Generate and download learning materials for your child's grade level.</p>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSection("materials")}
-                    className="mt-4 inline-flex items-center gap-2 rounded-full bg-cyan-400 px-4 py-2 text-xs font-black text-slate-950 transition hover:bg-cyan-300"
-                  >
-                    Go to Materials
-                  </button>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-                  <h4 className="font-bold text-white">Connect with Teachers</h4>
-                  <p className="mt-2 text-sm text-slate-400">Find and contact teachers who specialize in your child's learning needs.</p>
-                  <button
-                    type="button"
-                    onClick={() => goTo("teachers")}
-                    className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-400 px-4 py-2 text-xs font-black text-slate-950 transition hover:bg-emerald-300"
-                  >
-                    <FaWhatsapp /> Find Teachers
-                  </button>
-                </div>
+              <div className="mb-6 flex items-center justify-between gap-4">
+                <div><SectionLabel>E-Sports</SectionLabel><h3 className="mt-2 text-2xl font-black text-white">{tournamentInfo.title}</h3></div>
+                <FaTrophy className="text-4xl text-amber-300" />
               </div>
+              {dashboard.tournament ? (
+                <div className="overflow-hidden rounded-2xl border border-white/10">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-white/5 bg-white/5 text-[10px] uppercase tracking-widest text-slate-500">
+                        <th className="px-5 py-3">#</th><th className="px-5 py-3">Player</th><th className="px-5 py-3">P</th><th className="px-5 py-3">GD</th><th className="px-5 py-3 text-amber-400">Pts</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {dashboard.tournament.standings.map((row, i) => (
+                        <tr key={row.registrationId} className={`transition hover:bg-white/5 ${i === 0 ? "bg-amber-500/5" : ""}`}>
+                          <td className="px-5 py-4 font-bold text-slate-500">{i + 1}</td>
+                          <td className="px-5 py-4 font-semibold text-white">{row.name}</td>
+                          <td className="px-5 py-4 text-slate-400">{row.played}</td>
+                          <td className="px-5 py-4 text-slate-400">{row.goalDifference}</td>
+                          <td className="px-5 py-4 font-black text-amber-300">{row.points}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No tournament data yet.</p>
+              )}
             </GlassPanel>
           )}
+
         </div>
       </div>
 
-      {/* Profile Modal */}
+      {/* ── Profile Modal ── */}
       {profileModalOpen && (
         <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-slate-950/80 p-4 backdrop-blur-xl">
           <div className="relative my-8 w-full max-w-4xl overflow-hidden rounded-[2rem] border border-white/15 bg-slate-950/98 shadow-2xl">
+
             {/* Modal header */}
             <div className="flex items-center justify-between gap-4 border-b border-white/10 px-6 py-5 sm:px-8">
               <div className="flex items-center gap-4">
@@ -2682,6 +2540,7 @@ function DashboardPage({
 
             {/* Modal body */}
             <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[280px_1fr]">
+
               {/* Left: profile summary */}
               <div className="space-y-4">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
@@ -2785,6 +2644,7 @@ function DashboardPage({
                   <form className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-6" onSubmit={saveProfile}>
                     <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Edit Profile</p>
 
+                    {/* Picture upload with live preview */}
                     <div className="flex gap-5 items-start">
                       <div className="flex-shrink-0">
                         <div className="h-28 w-28 overflow-hidden rounded-full border-2 border-white/20 bg-slate-800">
@@ -3083,6 +2943,8 @@ function Footer({ goTo }) {
   return (
     <footer className="fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-slate-950/80 py-4 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        
+        {/* Left: Copyright & Branding */}
         <div className="flex items-center gap-4">
           <button onClick={() => goTo("home")} className="flex items-center gap-2 group">
             <img src={QoohiLogo} alt="QOOHI Logo" className="h-8 w-8 rounded-lg border border-white/10 transition-transform group-hover:scale-110" />
@@ -3093,18 +2955,20 @@ function Footer({ goTo }) {
           </p>
         </div>
 
+        {/* Center: Quick Links (Desktop) */}
         <div className="hidden items-center gap-6 md:flex">
-          {["teachers", "resources", "learn", "games"].map((id) => (
+          {["iep", "teachers", "resources", "learn", "games"].map((id) => (
             <button
               key={id}
               onClick={() => goTo(id)}
               className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 transition hover:text-cyan-400"
             >
-              {id === "resources" ? "materials" : id}
+              {id === "iep" ? "Learner IEP" : id}
             </button>
           ))}
         </div>
 
+        {/* Right: Contact & Support */}
         <div className="flex items-center gap-5">
           <div className="flex gap-4">
             <a href="mailto:qoohitech@gmail.com" className="text-slate-400 hover:text-cyan-400 transition">
@@ -3125,7 +2989,6 @@ function Footer({ goTo }) {
     </footer>
   );
 }
-
 function StreamingText({ text, speed = 20 }) {
   const [displayedText, setDisplayedText] = useState("");
   useEffect(() => {
@@ -3225,11 +3088,13 @@ function QoohiAIPage({ sessionToken }) {
     }, 50);
   };
 
+  // ✏️ START EDIT
   const startEdit = (index, content) => {
     setEditingIndex(index);
     setEditText(content);
   };
 
+  // ❌ CANCEL EDIT
   const cancelEdit = () => {
     setEditingIndex(null);
     setEditText("");

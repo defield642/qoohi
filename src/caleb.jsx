@@ -289,10 +289,10 @@ export default function Caleb() {
         </header>
 
         {/* Sidebar Layout */}
-        <div className="flex flex-col gap-4 md:flex-row md:gap-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
 
           {/* Left Sidebar */}
-          <aside className="hidden md:flex flex-col w-48 flex-shrink-0">
+          <aside className="hidden lg:flex flex-col w-48 flex-shrink-0">
             <div className="sticky top-6 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80 backdrop-blur-xl">
               <div className="border-b border-white/10 p-4">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Navigation</p>
@@ -322,7 +322,7 @@ export default function Caleb() {
           </aside>
 
           {/* Mobile Nav */}
-          <div className="flex md:hidden gap-2 overflow-x-auto pb-2">
+          <div className="flex lg:hidden gap-2 overflow-x-auto pb-2">
             {calebNav.map(({ id, Icon, label }) => (
               <button key={id} type="button" onClick={() => setActiveSection(id)}
                 className={`flex flex-shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs font-bold transition ${
