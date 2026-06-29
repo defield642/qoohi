@@ -29,8 +29,7 @@ const DEFAULT_COLUMNS = [
   "total",
 ];
 
-const API_BASE =
-  import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? "" : "http://localhost:3000");
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 function getLocalDateKey(date = new Date()) {
   const year = date.getFullYear();
@@ -94,11 +93,12 @@ export default function Caleb() {
   const [financeReady, setFinanceReady] = useState(false);
   const [historyData, setHistoryData] = useState({
     yesterday: normalizeFinanceRecord({}),
-    weekAgo: normalizeFinanceRecord({}),
   });
+  const [analytics, setAnalytics] = useState({ last7Days: 0, thisWeek: 0, thisMonth: 0 });
 
   const [tournament, setTournament] = useState(null);
   const [tournamentError, setTournamentError] = useState("");
+  const [activeSection, setActiveSection] = useState("finance");
 
   const backgrounds = [bg1, bg2, bg3, bg4, bg5, bg6];
 
@@ -247,6 +247,11 @@ export default function Caleb() {
     }
   };
 
+  const calebNav = [
+    { id: "finance", Icon: FaSave, label: "Finance" },
+    { id: "tournament", Icon: FaGamepad, label: "Tournament" },
+  ];
+
   return (
     <div className="relative min-h-screen overflow-hidden text-white">
       <AnimatePresence>
@@ -261,152 +266,218 @@ export default function Caleb() {
         />
       </AnimatePresence>
 
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" />
 
-      <div className="relative z-10 mx-auto max-w-7xl p-6">
-        <header className="mb-12">
-          <h1 className="text-4xl font-black">{formatDayTitle(date)}</h1>
-          <p className="mt-2 text-xl text-gray-400">{time}</p>
+      <div className="relative z-10 mx-auto max-w-7xl p-4 sm:p-6">
+
+        {/* Header */}
+        <header className="mb-6 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-cyan-400">QOOHI Operations</p>
+            <h1 className="text-3xl font-black text-white">{formatDayTitle(date)}</h1>
+            <p className="mt-1 text-sm text-slate-400">{time}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className={`flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold ${saving ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-400 animate-pulse" : "border-emerald-400/20 bg-emerald-400/10 text-emerald-400"}`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${saving ? "bg-cyan-400" : "bg-emerald-400"}`} />
+              {saving ? "Saving..." : "Saved"}
+            </span>
+            <button onClick={loadTournament} className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-white transition hover:bg-white/10">
+              <FaRedo className="text-xs" /> Refresh
+            </button>
+          </div>
         </header>
 
-        <section className="mb-12">
-          <div className="mb-6 flex items-center justify-between">
-            <h2 className="text-2xl font-black uppercase tracking-tighter">Finance Log</h2>
-            <p className={`text-sm font-bold ${saving ? "text-cyan-400 animate-pulse" : "text-emerald-400"}`}>
-              {saving ? "Saving..." : "All changes saved"}
-            </p>
-          </div>
+        {/* Sidebar Layout */}
+        <div className="flex flex-col gap-4 md:flex-row md:gap-6">
 
-          <div className="overflow-x-auto rounded-[2rem] border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl">
-            <table className="w-full min-w-[960px] border-collapse text-center">
-              <thead className="bg-slate-950/50">
-                <tr>
-                  {record.columns.map((column) => (
-                    <th key={column} className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      {column}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  {record.columns.map((column) => (
-                    <td key={column} className="border-t border-white/5 p-2">
-                      <textarea
-                        rows={1}
-                        className="min-h-[60px] w-full resize-none overflow-hidden rounded-xl bg-slate-950/40 px-3 py-4 text-center font-bold text-white focus:bg-slate-950/80 focus:outline-none transition-colors"
-                        value={record.values[column] || ""}
-                        onChange={(event) => handleChange(column, event.target.value)}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-8 grid gap-6 md:grid-cols-2">
-            <HistoryCard
-              label={`Yesterday • ${formatDayTitle(shiftDate(date, -1))}`}
-              record={historyData.yesterday}
-            />
-            <HistoryCard
-              label={`7 Days Ago • ${formatDayTitle(shiftDate(date, -7))}`}
-              record={historyData.weekAgo}
-            />
-          </div>
-        </section>
-
-        <section className="mb-12">
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-4">
-              <FaGamepad className="text-3xl text-rose-400" />
-              <h2 className="text-2xl font-black uppercase tracking-tighter">Tournament Manager</h2>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => toggleRegistration(true)}
-                className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
-                  tournament?.registrationOpen ? "bg-emerald-400 text-slate-950" : "bg-white/10 text-white hover:bg-white/20"
-                }`}
-              >
-                Open Registration
-              </button>
-              <button
-                onClick={() => toggleRegistration(false)}
-                className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
-                  !tournament?.registrationOpen ? "bg-rose-400 text-slate-950" : "bg-white/10 text-white hover:bg-white/20"
-                }`}
-              >
-                Close Registration
-              </button>
-              <button
-                onClick={startTournament}
-                className="flex items-center gap-2 rounded-full bg-cyan-400 px-6 py-2 text-xs font-black uppercase tracking-widest text-slate-950 transition hover:bg-cyan-300"
-              >
-                <FaTrophy /> Start Tournament
-              </button>
-            </div>
-          </div>
-
-          {tournamentError && (
-            <div className="mb-6 rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm font-bold text-rose-200">
-              {tournamentError}
-            </div>
-          )}
-
-          {tournament && (
-            <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr]">
-              <div className="rounded-[2rem] border border-white/10 bg-white/5 p-8 backdrop-blur-xl">
-                <div className="mb-6 flex items-center justify-between">
-                  <h3 className="text-lg font-black uppercase tracking-widest">Standings</h3>
-                  <span className="text-xs font-bold text-slate-400">{tournament.registered} Players</span>
+          {/* Left Sidebar */}
+          <aside className="hidden md:flex flex-col w-48 flex-shrink-0">
+            <div className="sticky top-6 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/80 backdrop-blur-xl">
+              <div className="border-b border-white/10 p-4">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Navigation</p>
+              </div>
+              <nav className="space-y-0.5 p-2">
+                {calebNav.map(({ id, Icon, label }) => (
+                  <button key={id} type="button" onClick={() => setActiveSection(id)}
+                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${
+                      activeSection === id
+                        ? "bg-cyan-500/20 font-bold text-cyan-300"
+                        : "font-medium text-slate-400 hover:bg-white/5 hover:text-white"
+                    }`}
+                  >
+                    <Icon className={`flex-shrink-0 text-[15px] ${activeSection === id ? "text-cyan-400" : "text-slate-600"}`} />
+                    {label}
+                  </button>
+                ))}
+              </nav>
+              <div className="border-t border-white/10 p-4">
+                <div className="rounded-xl border border-white/5 bg-white/5 p-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-600">Today</p>
+                  <p className="mt-1 text-xs font-bold text-white">{date}</p>
+                  <p className="mt-0.5 text-[10px] text-slate-500">{time}</p>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+              </div>
+            </div>
+          </aside>
+
+          {/* Mobile Nav */}
+          <div className="flex md:hidden gap-2 overflow-x-auto pb-2">
+            {calebNav.map(({ id, Icon, label }) => (
+              <button key={id} type="button" onClick={() => setActiveSection(id)}
+                className={`flex flex-shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs font-bold transition ${
+                  activeSection === id ? "bg-cyan-500 text-slate-950" : "border border-white/10 bg-white/5 text-slate-400 hover:text-white"
+                }`}
+              >
+                <Icon className="text-xs" />{label}
+              </button>
+            ))}
+          </div>
+
+          {/* Section Content */}
+          <div className="min-w-0 flex-1">
+
+            {/* FINANCE section */}
+            {activeSection === "finance" && (
+              <div className="space-y-6">
+                <div className="overflow-x-auto rounded-[2rem] border border-white/10 bg-white/5 shadow-2xl backdrop-blur-xl">
+                  <table className="w-full min-w-[760px] border-collapse text-center">
+                    <thead className="bg-slate-950/60">
                       <tr>
-                        <th className="pb-4">Name</th>
-                        <th className="pb-4">P</th>
-                        <th className="pb-4">GD</th>
-                        <th className="pb-4 text-right">Pts</th>
+                        {record.columns.map((column) => (
+                          <th key={column} className="px-3 py-4 text-[10px] font-black uppercase tracking-widest text-cyan-400">
+                            {column}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
-                      {tournament.standings.map((row) => (
-                        <tr key={row.registrationId}>
-                          <td className="py-4 font-bold">{row.name}</td>
-                          <td className="py-4">{row.played}</td>
-                          <td className="py-4">{row.goalDifference}</td>
-                          <td className="py-4 text-right font-black text-cyan-400">{row.points}</td>
-                        </tr>
-                      ))}
-                      {tournament.standings.length === 0 && (
-                        <tr>
-                          <td colSpan="4" className="py-10 text-center text-slate-500 font-bold">No players registered.</td>
-                        </tr>
-                      )}
+                    <tbody>
+                      <tr>
+                        {record.columns.map((column) => (
+                          <td key={column} className="border-t border-white/5 p-2">
+                            <textarea
+                              rows={1}
+                              className="min-h-[56px] w-full resize-none overflow-hidden rounded-xl bg-slate-950/40 px-3 py-3 text-center font-bold text-white placeholder-slate-700 transition-colors focus:bg-slate-950/80 focus:outline-none focus:ring-1 focus:ring-cyan-400/30"
+                              value={record.values[column] || ""}
+                              onChange={(event) => handleChange(column, event.target.value)}
+                              placeholder="—"
+                            />
+                          </td>
+                        ))}
+                      </tr>
                     </tbody>
                   </table>
                 </div>
-              </div>
 
-              <div className="rounded-[2rem] border border-white/10 bg-white/5 p-8 backdrop-blur-xl">
-                <h3 className="mb-6 text-lg font-black uppercase tracking-widest">Active Matches</h3>
-                <div className="grid gap-4">
-                  {tournament.matches.map((match) => (
-                    <MatchEditor key={match.id} match={match} onSave={updateMatch} />
-                  ))}
-                  {tournament.matches.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-white/10 p-10 text-center">
-                      <p className="text-slate-500 font-bold uppercase tracking-widest">Matches will appear here after starting</p>
-                    </div>
-                  )}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <HistoryCard
+                    label={`Yesterday • ${formatDayTitle(shiftDate(date, -1))}`}
+                    record={historyData.yesterday}
+                  />
+                  <HistoryCard
+                    label={`7 Days Ago • ${formatDayTitle(shiftDate(date, -7))}`}
+                    record={historyData.weekAgo}
+                  />
                 </div>
               </div>
-            </div>
-          )}
-        </section>
+            )}
+
+            {/* TOURNAMENT section */}
+            {activeSection === "tournament" && (
+              <div className="space-y-6">
+                {/* Controls */}
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => toggleRegistration(true)}
+                    className={`rounded-full px-5 py-2.5 text-xs font-black uppercase tracking-widest transition ${
+                      tournament?.registrationOpen ? "bg-emerald-400 text-slate-950" : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    }`}
+                  >
+                    Open Registration
+                  </button>
+                  <button
+                    onClick={() => toggleRegistration(false)}
+                    className={`rounded-full px-5 py-2.5 text-xs font-black uppercase tracking-widest transition ${
+                      !tournament?.registrationOpen ? "bg-rose-400 text-slate-950" : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    }`}
+                  >
+                    Close Registration
+                  </button>
+                  <button
+                    onClick={startTournament}
+                    className="flex items-center gap-2 rounded-full bg-cyan-400 px-6 py-2.5 text-xs font-black uppercase tracking-widest text-slate-950 transition hover:bg-cyan-300"
+                  >
+                    <FaTrophy /> Start Tournament
+                  </button>
+                </div>
+
+                {tournamentError && (
+                  <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm font-bold text-rose-200">
+                    {tournamentError}
+                  </div>
+                )}
+
+                {tournament ? (
+                  <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
+                    <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
+                      <div className="mb-5 flex items-center justify-between">
+                        <h3 className="font-black uppercase tracking-widest text-white">Standings</h3>
+                        <span className="rounded-full bg-cyan-500/10 px-3 py-1 text-xs font-bold text-cyan-300">{tournament.registered} Players</span>
+                      </div>
+                      <table className="w-full text-left text-sm">
+                        <thead className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                          <tr>
+                            <th className="pb-3">#</th>
+                            <th className="pb-3">Name</th>
+                            <th className="pb-3">P</th>
+                            <th className="pb-3">GD</th>
+                            <th className="pb-3 text-right">Pts</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {tournament.standings.map((row, i) => (
+                            <tr key={row.registrationId} className={i === 0 ? "text-amber-200" : ""}>
+                              <td className="py-3 text-slate-600 font-bold">{i + 1}</td>
+                              <td className="py-3 font-bold">{row.name}</td>
+                              <td className="py-3 text-slate-400">{row.played}</td>
+                              <td className="py-3 text-slate-400">{row.goalDifference}</td>
+                              <td className="py-3 text-right font-black text-cyan-400">{row.points}</td>
+                            </tr>
+                          ))}
+                          {tournament.standings.length === 0 && (
+                            <tr>
+                              <td colSpan="5" className="py-10 text-center text-slate-500 font-bold">No players registered.</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="rounded-[2rem] border border-white/10 bg-white/5 p-6 backdrop-blur-xl">
+                      <h3 className="mb-5 font-black uppercase tracking-widest text-white">Active Matches</h3>
+                      <div className="space-y-3">
+                        {tournament.matches.map((match) => (
+                          <MatchEditor key={match.id} match={match} onSave={updateMatch} />
+                        ))}
+                        {tournament.matches.length === 0 && (
+                          <div className="rounded-2xl border border-dashed border-white/10 p-10 text-center">
+                            <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Matches appear after tournament starts</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-12 text-center">
+                    <FaTrophy className="mx-auto mb-4 text-4xl text-slate-700" />
+                    <p className="font-bold text-slate-500">No tournament data. Click Refresh to load.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+          </div>
+        </div>
       </div>
     </div>
   );

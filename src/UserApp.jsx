@@ -47,13 +47,11 @@ import teacherImg from "./home/teacher.jpeg";
 
 const MotionDiv = motion.div;
 
-const API_BASE =
-  import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? "" : "http://localhost:3000");
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 const backgrounds = [bg1, bg2, bg3, bg4, bg5, bg6];
 const navItems = [
   { id: "home", label: "Home", img: fc26Img },
-  { id: "iep", label: "Learner IEP", img: iepImg },
   { id: "teachers", label: "Teachers", img: teacherImg },
   { id: "resources", label: "Resources", img: libraryImg },
   { id: "learn", label: "Learn", img: learnImg },
@@ -201,7 +199,6 @@ function useVoiceGuide(voiceScript) {
     setVoiceEnabled(newState);
     localStorage.setItem("qoohi_voice_enabled", newState.toString());
     if (newState) {
-      // Small delay to ensure state update has propagated if needed
       setTimeout(() => speak(true), 50);
     } else {
       synth?.cancel();
@@ -214,7 +211,21 @@ function useVoiceGuide(voiceScript) {
 
 export default function UserApp() {
   const [route, setRoute] = useState(getRouteFromHash());
-  // ... (rest of state)
+  const [registrationTarget, setRegistrationTarget] = useState({
+    type: "course",
+    packageKey: "coding_ai_training",
+  });
+  const [pendingVerification, setPendingVerification] = useState({
+    email: "",
+    mode: "register",
+  });
+  const [sessionToken, setSessionToken] = useState(
+    localStorage.getItem("qoohi_session_token") || "",
+  );
+  const [dashboard, setDashboard] = useState(null);
+  const [teacherOverview, setTeacherOverview] = useState(null);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [loadingDashboard, setLoadingDashboard] = useState(false);
 
   // 🔓 AUDIO UNBLOCKER
   useEffect(() => {
@@ -234,33 +245,22 @@ export default function UserApp() {
       window.removeEventListener("keydown", unlock);
     };
   }, []);
-  const [registrationTarget, setRegistrationTarget] = useState({
-    type: "course",
-    packageKey: "coding_ai_training",
-  });
-  const [pendingVerification, setPendingVerification] = useState({
-    email: "",
-    mode: "register",
-  });
-  const [sessionToken, setSessionToken] = useState(
-    localStorage.getItem("qoohi_session_token") || "",
-  );
-  const [dashboard, setDashboard] = useState(null);
-  const [teacherOverview, setTeacherOverview] = useState(null);
-  const [statusMessage, setStatusMessage] = useState("");
-  const [loadingDashboard, setLoadingDashboard] = useState(false);
+
+  const refreshTeacherOverview = useCallback(async () => {
+    if (!sessionToken || !dashboard || dashboard.student?.role !== "teacher") {
+      setTeacherOverview(null);
+      return null;
+    }
+    const data = await fetchJson("/api/teacher/overview", {
+      headers: { Authorization: `Bearer ${sessionToken}` },
+    });
+    setTeacherOverview(data);
+    return data;
+  }, [dashboard, sessionToken]);
 
   useEffect(() => {
-    if (!dashboard || dashboard.student?.role !== "teacher") {
-      setTeacherOverview(null);
-      return;
-    }
-    fetchJson("/api/teacher/overview", {
-      headers: { Authorization: `Bearer ${sessionToken}` },
-    })
-      .then((data) => setTeacherOverview(data))
-      .catch(() => setTeacherOverview(null));
-  }, [dashboard, sessionToken]);
+    refreshTeacherOverview().catch(() => setTeacherOverview(null));
+  }, [refreshTeacherOverview]);
 
   const backgroundImage = useMemo(
     () => backgrounds[Math.floor(Math.random() * backgrounds.length)],
@@ -310,9 +310,8 @@ export default function UserApp() {
     goTo("register");
   };
 
-  const openTournamentRegistration = () => {
-    setRegistrationTarget({ type: "tournament", packageKey: "" });
-    goTo("register");
+  const openMaterialsPage = () => {
+    goTo("resources");
   };
 
   const openTeacherRegistration = () => {
@@ -409,10 +408,10 @@ export default function UserApp() {
             {route === "about" && <AboutPage goTo={goTo} />}
             {route === "iep" && <IEPPage openIepRegistration={openIepRegistration} />}
             {route === "teachers" && <TeachersPage openTeacherRegistration={openTeacherRegistration} />}
-            {route === "resources" && <ResourcesPage openParentRegistration={openParentRegistration} />}
+            {route === "resources" && <ResourcesPage openParentRegistration={openParentRegistration} sessionToken={sessionToken} />}
             {route === "games" && <GamesPage />}
             {route === "new" && (
-              <NewPage openTournamentRegistration={openTournamentRegistration} />
+              <NewPage openMaterialsPage={openMaterialsPage} />
             )}
             {route === "learn" && (
               <LearnPage openCourseRegistration={openCourseRegistration} />
@@ -450,12 +449,11 @@ export default function UserApp() {
                 sessionToken={sessionToken}
                 goTo={goTo}
                 onRefresh={refreshDashboard}
+                onRefreshTeacherOverview={refreshTeacherOverview}
                 onUpdateIep={async (userId, assessmentStatus, performanceLevel) => {
                   try {
                     const data = await fetchJson(`/api/admin/users/${userId}/iep`, {
                       method: "POST",
-                      // Reuse admin endpoint if teacher has key, but wait, teachers use session!
-                      // I should add a teacher-specific IEP update endpoint or modify the admin one.
                       headers: { Authorization: `Bearer ${sessionToken}` },
                       body: JSON.stringify({ assessmentStatus, performanceLevel }),
                     });
@@ -557,9 +555,6 @@ function Header({ route, goTo }) {
 }
 
 function HomePage({ dashboard, goTo }) {
-
-
-
   const firstName = dashboard?.student?.fullName?.split(" ")[0];
   const voiceScript = `Welcome ${firstName || ""} to QOOHI. We are elevating learning, creativity, and play. Explore our FC 26 tournaments, individualized education programs, and advanced AI training. Your journey to mastery starts here.`;
   const { voiceEnabled, toggleVoice, isSpeaking } = useVoiceGuide(voiceScript);
@@ -603,7 +598,6 @@ function HomePage({ dashboard, goTo }) {
 
       {/* CONTENT */}
       <div className="relative z-10 w-full max-w-6xl px-4 py-20 text-center">
-
         {/* WELCOME */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -676,13 +670,12 @@ function HomePage({ dashboard, goTo }) {
           }}
           className="mt-20 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 xl:gap-6"
         >
-
           {/* FC26 */}
           <HomeButton 
             onClick={() => goTo("new")}
             image={fc26Img}
-            label="FC 26"
-            sublabel="Tournament"
+            label="Materials"
+            sublabel="Grades 1-9"
           />
 
           {/* LEARN */}
@@ -694,19 +687,25 @@ function HomePage({ dashboard, goTo }) {
           />
 
           {/* LOGIN */}
-          <HomeButton 
-            onClick={() => goTo("login")}
+          <HomeButton
+            onClick={() => {
+              if (dashboard) {
+                goTo("dashboard");
+              } else {
+                goTo("login");
+              }
+            }}
             image={loginImg}
-            label="Login"
+            label={dashboard ? "Dashboard" : "Login"}
             sublabel="Dashboard"
           />
-
-          {/* IEP */}
+       
+          {/* PARENTS */}
           <HomeButton 
-            onClick={() => goTo("iep")}
-            image={iepImg}
-            label="IEP"
-            sublabel="Performance"
+            onClick={openParentRegistration}
+            image={libraryImg}
+            label="Parent"
+            sublabel="Register"
           />
 
           {/* TEACHERS */}
@@ -733,7 +732,6 @@ function HomePage({ dashboard, goTo }) {
             sublabel="Smart Assistant"
             highlight
           />
-
         </motion.div>
       </div>
     </div>
@@ -1071,55 +1069,216 @@ function TeachersPage({ openTeacherRegistration }) {
   );
 }
 
-function ResourcesPage({ openParentRegistration }) {
-  const voiceScript = "The QOOHI Resource Library. Your gateway to mastery. Access digital e-books, gamified exercises, and interactive videos, or order physical workbooks and activity kits delivered to your doorstep. Supporting every step of your growth.";
+function ResourcesPage({ openParentRegistration, sessionToken }) {
+  const voiceScript = "Kenyan CBC materials for grades one through nine. Describe what you need, generate a printable lesson pack, and download it after payment.";
+  const [gradeLevel, setGradeLevel] = useState("1");
+  const [prompt, setPrompt] = useState("");
+  const [materialTitle, setMaterialTitle] = useState("");
+  const [materialBody, setMaterialBody] = useState("");
+  const [teachers, setTeachers] = useState([]);
+  const [status, setStatus] = useState("");
+  const [loadingMaterial, setLoadingMaterial] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetchJson("/api/public/teachers")
+      .then((data) => {
+        if (active) setTeachers(Array.isArray(data.teachers) ? data.teachers : []);
+      })
+      .catch(() => {
+        if (active) setTeachers([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const keywordScore = (teacher) => {
+    const haystack = `${teacher.full_name || ""} ${teacher.specializations || ""}`.toLowerCase();
+    const tokens = `${gradeLevel} ${prompt}`.toLowerCase().split(/[^a-z0-9]+/).filter((item) => item.length > 2);
+    return tokens.reduce((score, token) => score + (haystack.includes(token) ? 2 : 0), 0) + (teacher.specializations ? 1 : 0);
+  };
+
+  const recommendedTeachers = [...teachers]
+    .sort((left, right) => keywordScore(right) - keywordScore(left))
+    .slice(0, 4);
+
+  const requestMaterials = async () => {
+    const topic = prompt.trim();
+    if (!topic) {
+      throw new Error("Describe the material you want before generating it.");
+    }
+    setLoadingMaterial(true);
+    setStatus("");
+    try {
+      const data = await fetchJson("/api/ai/materials", {
+        method: "POST",
+        body: JSON.stringify({ grade: gradeLevel, topic }),
+      });
+      setMaterialTitle(data.title || `Grade ${gradeLevel} materials`);
+      setMaterialBody(data.content || "");
+      setStatus("Materials ready. Review the preview below.");
+      return data;
+    } finally {
+      setLoadingMaterial(false);
+    }
+  };
+
+  const downloadMaterials = async () => {
+    setDownloading(true);
+    setStatus("");
+    try {
+      if (!sessionToken) {
+        throw new Error("Please log in before downloading materials.");
+      }
+      const generated = materialBody ? { title: materialTitle, content: materialBody } : await requestMaterials();
+      await fetchJson("/api/user/service/use", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        body: JSON.stringify({ serviceKey: "materials_download" }),
+      });
+      const fileTitle = generated.title || `Grade ${gradeLevel} materials`;
+      const blob = new Blob([
+        `${fileTitle}
+
+${generated.content || materialBody || ""}
+`,
+      ], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${fileTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "qoohi-materials"}.txt`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setStatus("Download started after charging Ksh 10.");
+    } catch (err) {
+      setStatus(err.message);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
-    <PageStack 
-      title="Digital Library" 
-      subtitle="Comprehensive soft and hard learning resources for every stage."
+    <PageStack
+      title="Kenyan Materials"
+      subtitle="Grades 1 to 9 learning packs, teacher recommendations, and instant printable downloads."
       voiceScript={voiceScript}
     >
-      <div className="grid gap-8 lg:grid-cols-2">
-        <div className="relative overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900 group">
-          <img src={libraryImg} alt="Soft Copies" className="absolute inset-0 h-full w-full object-cover opacity-20 transition-transform duration-700 group-hover:scale-110" />
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-950/40 to-transparent" />
-          <div className="relative p-10 sm:p-14">
-            <SectionLabel>Instant Access</SectionLabel>
-            <h3 className="mt-4 text-5xl font-black text-white uppercase tracking-tighter">Soft <span className="text-cyan-400">Copies</span></h3>
-            <ul className="mt-10 space-y-4 text-xl font-bold text-slate-300">
-              {["Interactive E-books", "Educational Videos", "Gamified Exercises", "Printable PDFs"].map(item => (
-                <li key={item} className="flex items-center gap-3">
-                  <FaChevronRight className="text-cyan-400 text-sm" /> {item}
-                </li>
-              ))}
-            </ul>
+      <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="space-y-6 rounded-[3rem] border border-white/10 bg-slate-950/90 p-6 sm:p-8">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <SectionLabel>Grade selector</SectionLabel>
+              <h2 className="mt-2 text-3xl font-black text-white">Choose Grade {gradeLevel}</h2>
+            </div>
+            <div className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-cyan-300">
+              Download Ksh 10
+            </div>
           </div>
-        </div>
-        
-        <div className="relative overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900 group">
-          <img src={bg2} alt="Hard Copies" className="absolute inset-0 h-full w-full object-cover opacity-20 transition-transform duration-700 group-hover:scale-110" />
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-950/40 to-transparent" />
-          <div className="relative p-10 sm:p-14">
-            <SectionLabel>Tangible Tools</SectionLabel>
-            <h3 className="mt-4 text-5xl font-black text-white uppercase tracking-tighter">Hard <span className="text-cyan-400">Copies</span></h3>
-            <ul className="mt-10 space-y-4 text-xl font-bold text-slate-300">
-              {["Level-Specific Workbooks", "Graded Reading Books", "Flashcard Sets", "Activity Kits"].map(item => (
-                <li key={item} className="flex items-center gap-3">
-                  <FaChevronRight className="text-cyan-400 text-sm" /> {item}
-                </li>
-              ))}
-            </ul>
+
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-9">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((grade) => (
+              <button
+                key={grade}
+                type="button"
+                onClick={() => setGradeLevel(String(grade))}
+                className={`rounded-2xl border px-3 py-3 text-sm font-black transition ${
+                  String(gradeLevel) === String(grade)
+                    ? "border-cyan-300 bg-cyan-300 text-slate-950"
+                    : "border-white/10 bg-white/5 text-white hover:border-cyan-400/40 hover:bg-cyan-400/10"
+                }`}
+              >
+                {grade}
+              </button>
+            ))}
           </div>
+
+          <label className="block space-y-3">
+            <span className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Describe what you want</span>
+            <textarea
+              rows="6"
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              placeholder="Example: make revision notes and exercises for Grade 4 fractions with simple answers"
+              className="w-full rounded-[1.5rem] border border-white/10 bg-slate-950/80 px-4 py-4 text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/60"
+            />
+          </label>
+
+          <div className="flex flex-wrap gap-3">
+            <ActionButton type="button" onClick={requestMaterials} disabled={loadingMaterial} className="!px-6 !py-3 !text-sm">
+              {loadingMaterial ? "Generating..." : "Generate materials"}
+            </ActionButton>
+            <button
+              type="button"
+              onClick={downloadMaterials}
+              disabled={downloading}
+              className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-6 py-3 text-sm font-black text-emerald-200 transition hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {downloading ? "Downloading..." : "Download for Ksh 10"}
+            </button>
+            <button
+              type="button"
+              onClick={openParentRegistration}
+              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+            >
+              Register as Parent
+            </button>
+          </div>
+
+          {status && <Notice tone={status.toLowerCase().includes("ready") ? "info" : "error"}>{status}</Notice>}
+
+          {materialBody && (
+            <div className="rounded-[2rem] border border-cyan-400/20 bg-cyan-400/5 p-6">
+              <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-300">Preview</p>
+              <h3 className="mt-2 text-2xl font-black text-white">{materialTitle || `Grade ${gradeLevel} materials`}</h3>
+              <pre className="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-300">{materialBody}</pre>
+            </div>
+          )}
         </div>
 
-        <div className="lg:col-span-2 relative overflow-hidden rounded-[3rem] border border-cyan-400/20 bg-cyan-400/5 p-10 sm:p-14 shadow-2xl shadow-cyan-400/10 flex flex-wrap items-center justify-between gap-8">
-          <div className="max-w-xl">
-            <SectionLabel>For Parents</SectionLabel>
-            <h2 className="mt-4 text-4xl font-black text-white">Parents as Financiers</h2>
-            <p className="mt-4 text-lg text-slate-300 font-bold leading-relaxed">Support your child's growth through physical kits and graded materials designed for their specific IEP level.</p>
+        <div className="space-y-6">
+          <div className="rounded-[3rem] border border-white/10 bg-white/5 p-6 sm:p-8">
+            <SectionLabel>Teacher recommendations</SectionLabel>
+            <h3 className="mt-2 text-2xl font-black text-white">Who to contact</h3>
+            <p className="mt-2 text-sm text-slate-400">These are the teachers most aligned with the grade and topic you typed.</p>
+            <div className="mt-6 space-y-3">
+              {recommendedTeachers.length === 0 && <p className="rounded-2xl border border-white/5 bg-white/5 px-4 py-4 text-sm text-slate-500">No teachers available yet.</p>}
+              {recommendedTeachers.map((teacher) => {
+                const phone = String(teacher.whatsapp || "").replace(/\D/g, "");
+                const message = `Hello ${teacher.full_name || "teacher"}, I need help with Grade ${gradeLevel} materials: ${prompt || "general guidance"}`;
+                const whatsappHref = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : null;
+                return (
+                  <div key={teacher.id} className="rounded-[1.5rem] border border-white/10 bg-slate-950/60 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-lg font-black text-white">{teacher.full_name}</p>
+                        <p className="mt-1 text-sm text-slate-400">{teacher.specializations || "General support"}</p>
+                        <p className="mt-1 text-xs text-slate-500">{teacher.email}</p>
+                      </div>
+                      {whatsappHref && (
+                        <a href={whatsappHref} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-full bg-emerald-400 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-emerald-300">
+                          WhatsApp
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <ActionButton onClick={openParentRegistration} className="!text-xl !py-5 px-12 !rounded-2xl">Register as Parent</ActionButton>
+
+          <div className="rounded-[3rem] border border-cyan-400/20 bg-cyan-400/5 p-6 sm:p-8">
+            <SectionLabel>How it works</SectionLabel>
+            <ol className="mt-4 space-y-3 text-sm leading-7 text-slate-300">
+              <li>1. Select a grade from 1 to 9.</li>
+              <li>2. Describe the exact topic or exercise you need.</li>
+              <li>3. Generate the materials with OpenAI.</li>
+              <li>4. Download the file after the Ksh 10 charge is processed.</li>
+            </ol>
+          </div>
         </div>
       </div>
     </PageStack>
@@ -1161,44 +1320,47 @@ function GamesPage() {
   );
 }
 
-function NewPage({ openTournamentRegistration }) {
-  const voiceScript = "The QOOHI Spotlight. Where competition meets community. Register for our featured FC 26 tournament, win big, and climb the standings. Stay updated with the latest in digital sports and community events.";
+function NewPage({ openMaterialsPage }) {
+  const voiceScript = "Browse grade 1 to grade 9 Kenyan learning materials and open the full materials workspace.";
 
   return (
-    <PageStack 
-      title="Spotlight" 
-      subtitle="Latest updates and featured community tournaments."
+    <PageStack
+      title="Materials Spotlight"
+      subtitle="Quick access to the new Kenyan CBC materials workspace."
       voiceScript={voiceScript}
     >
-      <div className="relative overflow-hidden rounded-[4rem] border border-white/10 bg-slate-950 shadow-2xl group">
-        <div className="grid gap-0 lg:grid-cols-2">
-          <div className="relative min-h-[400px] overflow-hidden">
-            <img src={fc26Img} alt="FC 26" className="absolute inset-0 h-full w-full object-cover transition-transform duration-1000 group-hover:scale-110" />
-            <div className="absolute inset-0 bg-gradient-to-r from-slate-950/40 to-transparent" />
-          </div>
-          <div className="flex flex-col justify-center p-10 sm:p-16 relative z-10">
-            <div className="inline-flex w-fit items-center gap-3 rounded-full bg-amber-400/10 px-6 py-2 text-amber-400 border border-amber-400/20 mb-8">
-              <FaTrophy className="text-sm animate-bounce" />
-              <span className="text-[10px] font-black uppercase tracking-[0.3em]">Featured Event</span>
-            </div>
-            <h2 className="text-5xl font-black text-white tracking-tighter sm:text-7xl uppercase leading-[0.85]">FC 26 <br/><span className="text-cyan-400">CHAMPIONS</span></h2>
-            <p className="mt-10 text-xl font-bold leading-relaxed text-slate-400 max-w-lg">
-              Compete in our premier football tournament. 10 elite slots. Ultimate prestige.
+      <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="relative overflow-hidden rounded-[4rem] border border-white/10 bg-slate-950 shadow-2xl group">
+          <img src={libraryImg} alt="Materials library" className="absolute inset-0 h-full w-full object-cover opacity-20 transition-transform duration-1000 group-hover:scale-110" />
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-950/45 to-transparent" />
+          <div className="relative p-10 sm:p-16">
+            <SectionLabel>Kenyan CBC</SectionLabel>
+            <h2 className="mt-6 text-5xl font-black text-white leading-tight sm:text-6xl">Grade 1 to 9 materials, generated on demand.</h2>
+            <p className="mt-8 max-w-2xl text-lg leading-8 text-slate-300">
+              Parents can describe what they want, generate printable notes and exercises with OpenAI, and download the pack after a small Ksh 10 charge.
             </p>
-            <div className="mt-12 grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <div className="rounded-[1.5rem] border border-white/5 bg-white/5 p-6 backdrop-blur-md">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Entry</p>
-                <p className="mt-1 text-2xl font-black text-white">Ksh 250</p>
-              </div>
-              <div className="rounded-[1.5rem] border border-white/5 bg-white/5 p-6 backdrop-blur-md">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Winner</p>
-                <p className="mt-1 text-2xl font-black text-amber-400">Ksh 700</p>
-              </div>
+            <div className="mt-10 flex flex-wrap gap-3">
+              <button onClick={openMaterialsPage} className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-6 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200">
+                Open Materials
+              </button>
+              <button onClick={() => window.location.hash = "learn"} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-bold text-white transition hover:bg-white/10">
+                View Courses
+              </button>
             </div>
-            <ActionButton className="mt-12 !text-xl !py-6 !rounded-[2rem] shadow-[0_0_30px_rgba(34,211,238,0.3)]" onClick={openTournamentRegistration}>
-              SECURE YOUR SLOT
-            </ActionButton>
           </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
+          {[
+            { title: "Grades 1-3", text: "Reading basics, counting, and guided practice." },
+            { title: "Grades 4-6", text: "Core CBC revision, notes, and homework packs." },
+            { title: "Grades 7-9", text: "Deeper subject support and exam prep materials." },
+          ].map((item) => (
+            <div key={item.title} className="rounded-[2rem] border border-white/10 bg-white/5 p-6 backdrop-blur-md">
+              <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-300">{item.title}</p>
+              <p className="mt-3 text-sm leading-7 text-slate-300">{item.text}</p>
+            </div>
+          ))}
         </div>
       </div>
     </PageStack>
@@ -1276,7 +1438,7 @@ function ContactPage() {
 }
 
 function RegisterPage({ registrationTarget, onSubmit, statusMessage }) {
-  const [form, setForm] = useState({ fullName: "", whatsapp: "", email: "" });
+  const [form, setForm] = useState({ fullName: "", whatsapp: "", email: "", specialization: "", childName: "", childGradeLevel: "", childGoals: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const selectedPackage = packageCards.find((item) => item.key === registrationTarget.packageKey);
@@ -1314,6 +1476,10 @@ function RegisterPage({ registrationTarget, onSubmit, statusMessage }) {
         mode: "register",
         registrationType: registrationTarget.type,
         selectedPackage: (isTeacher || isStudent || isParent || isTournament || isIep) ? "" : registrationTarget.packageKey,
+        specialization: form.specialization,
+        childName: form.childName,
+        childGradeLevel: form.childGradeLevel,
+        childGoals: form.childGoals,
       });
     } catch (err) {
       setError(err.message);
@@ -1367,6 +1533,40 @@ function RegisterPage({ registrationTarget, onSubmit, statusMessage }) {
         <Input label="Full name" value={form.fullName} onChange={(value) => setForm((current) => ({ ...current, fullName: value }))} />
         <Input label="WhatsApp number" value={form.whatsapp} onChange={(value) => setForm((current) => ({ ...current, whatsapp: value }))} />
         <Input label="Email address" type="email" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} />
+        {isTeacher && (
+          <Input
+            label="Specialization"
+            value={form.specialization}
+            onChange={(value) => setForm((current) => ({ ...current, specialization: value }))}
+            placeholder="Math, Science, English, CBC support"
+          />
+        )}
+        {isParent && (
+          <div className="space-y-4">
+            <Input
+              label="Child name"
+              value={form.childName}
+              onChange={(value) => setForm((current) => ({ ...current, childName: value }))}
+              placeholder="Student full name"
+            />
+            <Input
+              label="Grade level"
+              value={form.childGradeLevel}
+              onChange={(value) => setForm((current) => ({ ...current, childGradeLevel: value }))}
+              placeholder="Grade 1 to Grade 9"
+            />
+            <label className="block space-y-2">
+              <span className="text-sm font-bold text-slate-300">Goals for your child</span>
+              <textarea
+                rows="4"
+                value={form.childGoals}
+                onChange={(event) => setForm((current) => ({ ...current, childGoals: event.target.value }))}
+                placeholder="Example: improve reading fluency, pass maths, and build confidence"
+                className="w-full rounded-[1.5rem] border border-white/10 bg-slate-950/80 px-4 py-4 text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/60"
+              />
+            </label>
+          </div>
+        )}
         {statusMessage && <Notice tone="info">{statusMessage}</Notice>}
         {error && <Notice tone="error">{error}</Notice>}
         <ActionButton disabled={submitting} type="submit">
@@ -1454,11 +1654,13 @@ function DashboardPage({
   goTo,
   sessionToken,
   onRefresh,
+  onRefreshTeacherOverview,
 }) {
   const [showMessages, setShowMessages] = useState(false);
   const [editingIep, setEditingIep] = useState(null);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileTab, setProfileTab] = useState("view");
+  const [activeSection, setActiveSection] = useState("profile");
   const [profileStatus, setProfileStatus] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [submittingDeposit, setSubmittingDeposit] = useState(false);
@@ -1478,6 +1680,16 @@ function DashboardPage({
     mpesaName: "",
     mpesaNumber: "",
   });
+  const [teacherSpecializationsDraft, setTeacherSpecializationsDraft] = useState("");
+  
+  // Parent materials state
+  const [parentGradeLevel, setParentGradeLevel] = useState("1");
+  const [parentPrompt, setParentPrompt] = useState("");
+  const [parentMaterialTitle, setParentMaterialTitle] = useState("");
+  const [parentMaterialBody, setParentMaterialBody] = useState("");
+  const [parentLoadingMaterial, setParentLoadingMaterial] = useState(false);
+  const [parentStatus, setParentStatus] = useState("");
+  const [parentDownloading, setParentDownloading] = useState(false);
 
   useEffect(() => {
     if (!dashboard?.student) return;
@@ -1486,7 +1698,76 @@ function DashboardPage({
       whatsapp: dashboard.student.whatsapp || "",
       avatarUrl: dashboard.student.avatarUrl || "",
     });
-  }, [dashboard]);
+    if (dashboard.student.role === "teacher") {
+      setTeacherSpecializationsDraft(dashboard.student.specializations || teacherOverview?.currentTeacher?.specializations || "");
+    }
+  }, [dashboard, teacherOverview]);
+
+  // Auto-generate materials when grade changes for parent
+  useEffect(() => {
+    if (dashboard?.student?.role === "parent" && parentPrompt.trim()) {
+      const timer = setTimeout(() => {
+        requestParentMaterials();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [parentGradeLevel, parentPrompt]);
+
+  const requestParentMaterials = async () => {
+    const topic = parentPrompt.trim();
+    if (!topic || dashboard?.student?.role !== "parent") return;
+    
+    setParentLoadingMaterial(true);
+    setParentStatus("");
+    try {
+      const data = await fetchJson("/api/ai/materials", {
+        method: "POST",
+        body: JSON.stringify({ grade: parentGradeLevel, topic }),
+      });
+      setParentMaterialTitle(data.title || `Grade ${parentGradeLevel} materials`);
+      setParentMaterialBody(data.content || "");
+      setParentStatus("Materials ready. You can download below.");
+    } catch (err) {
+      setParentStatus(err.message || "Failed to generate materials.");
+    } finally {
+      setParentLoadingMaterial(false);
+    }
+  };
+
+  const downloadParentMaterials = async () => {
+    setParentDownloading(true);
+    setParentStatus("");
+    try {
+      if (!sessionToken) {
+        throw new Error("Please log in before downloading materials.");
+      }
+      if (!parentMaterialBody) {
+        await requestParentMaterials();
+      }
+      await fetchJson("/api/user/service/use", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        body: JSON.stringify({ serviceKey: "materials_download" }),
+      });
+      const fileTitle = parentMaterialTitle || `Grade ${parentGradeLevel} materials`;
+      const blob = new Blob([
+        `${fileTitle}\n\n${parentMaterialBody || ""}\n`,
+      ], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${fileTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "qoohi-materials"}.txt`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setParentStatus("Download started after charging Ksh 10.");
+    } catch (err) {
+      setParentStatus(err.message);
+    } finally {
+      setParentDownloading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -1522,7 +1803,6 @@ function DashboardPage({
   const profileAvatar = profileDraft.avatarUrl || dashboard.student?.avatarUrl || "";
   const fullName = profileDraft.fullName || dashboard.student.fullName;
   const hasCourses = dashboard.enrollments && dashboard.enrollments.length > 0;
-  const hasTournament = !!dashboard.tournamentRegistration;
   const canAfford = (charge) => Number(charge || 0) <= 0 || balance >= Number(charge || 0);
   const authHeaders = sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
   const profileUpdateCharge = Number(
@@ -1532,12 +1812,8 @@ function DashboardPage({
   const firstName = fullName?.split(" ")[0] || "";
   const profileScript = `Welcome ${firstName || ""} to your QOOHI dashboard. Review your profile, balance, services, and activity. Deposit funds, withdraw when needed, and keep your learning journey moving.`;
 
-  const allStudents = teacherOverview
-    ? teacherOverview.groups
-        .filter((g) => !["teacher", "parent"].includes(g.key))
-        .flatMap((g) => g.members)
-        .filter((v, i, a) => a.findIndex((t) => t.id === v.id) === i)
-    : [];
+  const teacherChildren = Array.isArray(teacherOverview?.children) ? teacherOverview.children : [];
+  const teacherRoster = Array.isArray(teacherOverview?.teachers) ? teacherOverview.teachers : [];
 
   const serviceActions = {
     computer_packages: { route: "learn", label: "Open Courses" },
@@ -1552,6 +1828,18 @@ function DashboardPage({
     parent_registration: { route: "resources", label: "Open Resources" },
     profile_update: { route: null, label: "Edit Profile" },
   };
+
+  const sidebarNav = [
+    { id: "profile", Icon: FaUserGraduate, label: "Profile" },
+    { id: "balance", Icon: FaWallet, label: "Balance" },
+    { id: "services", Icon: FaLayerGroup, label: "Services" },
+    { id: "activity", Icon: FaHistory, label: "Activity" },
+    ...(isParent ? [{ id: "materials", Icon: FaBookOpen, label: "Materials" }] : []),
+    ...(hasCourses ? [{ id: "courses", Icon: FaBookOpen, label: "Courses" }] : []),
+    ...(isStudent && assessmentStatus === "completed" ? [{ id: "roadmap", Icon: FaGraduationCap, label: "Roadmap" }] : []),
+    ...(isTeacher ? [{ id: "roster", Icon: FaChalkboardTeacher, label: "Roster" }] : []),
+    ...(isParent ? [{ id: "parent", Icon: FaUsers, label: "Support" }] : []),
+  ];
 
   const openProfile = (tab = "view") => {
     setProfileTab(tab);
@@ -1652,6 +1940,21 @@ function DashboardPage({
     }
   };
 
+  const saveTeacherSpecializations = async () => {
+    setProfileStatus("");
+    try {
+      await fetchJson("/api/teacher/specializations", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${sessionToken}` },
+        body: JSON.stringify({ specializations: teacherSpecializationsDraft }),
+      });
+      await onRefreshTeacherOverview?.();
+      setProfileStatus("Teacher specializations saved.");
+    } catch (err) {
+      setProfileStatus(err.message);
+    }
+  };
+
   return (
     <PageStack
       title="Dashboard"
@@ -1659,572 +1962,913 @@ function DashboardPage({
       voiceScript={profileScript}
       compact
     >
-      <div className="grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
-        <GlassPanel className="overflow-hidden border-white/15 bg-slate-900/60 p-0">
-          <div className="relative h-32 bg-gradient-to-r from-cyan-500/30 via-sky-500/20 to-slate-900">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.35),transparent_45%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.2),transparent_40%)]" />
-          </div>
-          <div className="px-6 pb-6 pt-0 sm:px-8">
-            <div className="-mt-14 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-              <button
-                type="button"
-                onClick={() => openProfile("view")}
-                className="group flex items-end gap-4 text-left"
-              >
-                <div className="relative h-28 w-28 flex-shrink-0 overflow-hidden rounded-[1.75rem] border border-white/20 bg-slate-950 shadow-2xl shadow-cyan-500/20">
-                  {profileAvatar ? (
-                    <img src={profileAvatar} alt={fullName} className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center bg-slate-900 text-4xl font-black text-cyan-300">
-                      {fullName?.[0] || "Q"}
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/35 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+      <div className="flex flex-row gap-6">
+        {/* Left Sidebar */}
+        <aside className="flex flex-col w-52 flex-shrink-0">
+          <div className="sticky top-24 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/90 backdrop-blur-xl">
+            <div className="border-b border-white/10 p-4">
+              <button type="button" onClick={() => setActiveSection("profile")} className="group flex w-full items-center gap-3 text-left">
+                <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border-2 border-white/20 bg-slate-800 transition group-hover:border-cyan-400/40">
+                  {profileAvatar
+                    ? <img src={profileAvatar} alt="" className="h-full w-full object-cover" />
+                    : <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-cyan-800 to-blue-900 text-sm font-black text-cyan-200">{fullName?.[0]?.toUpperCase() || "Q"}</div>
+                  }
                 </div>
-                <div className="space-y-2 pb-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-3xl font-black tracking-tight text-white sm:text-4xl">{fullName}</h2>
-                    <Badge>{roleLabel}</Badge>
-                  </div>
-                  <p className="max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                    {isTeacher
-                      ? "Teacher dashboard for tracking learners, updating IEPs, and sending focused guidance."
-                      : isParent
-                        ? "Parent dashboard for account balance, messages, and learner support."
-                        : "Student dashboard for your profile, learning progress, balance, and premium services."}
-                  </p>
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-300">
-                      Balance Ksh {balance.toLocaleString()}
-                    </span>
-                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-slate-300">
-                      {dashboard.student.email}
-                    </span>
-                    <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-slate-300">
-                      {dashboard.student.whatsapp}
-                    </span>
-                    {profileUpdateCharge > 0 && (
-                      <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-amber-200">
-                        Profile edits Ksh {profileUpdateCharge.toLocaleString()}
-                      </span>
-                    )}
-                  </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-bold text-white">{firstName || fullName}</p>
+                  <p className="truncate text-[10px] capitalize text-slate-500">{roleLabel}</p>
                 </div>
               </button>
-
-              <div className="flex flex-wrap gap-2 md:justify-end">
-                <SecondaryButton onClick={() => openProfile("edit")} className="!px-4 !py-2 !text-sm">
-                  <FaEdit /> Edit Profile
-                </SecondaryButton>
-                <ActionButton onClick={() => openProfile("deposit")} className="!px-4 !py-2 !text-sm">
-                  <FaWallet /> Deposit
-                </ActionButton>
-                <SecondaryButton onClick={() => openProfile("withdraw")} className="!px-4 !py-2 !text-sm">
-                  <FaMinusCircle /> Withdraw
-                </SecondaryButton>
-                <SecondaryButton onClick={logout} className="!px-4 !py-2 !text-sm">
-                  Logout
-                </SecondaryButton>
+              <div className="mt-3 flex items-center justify-between rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2">
+                <span className="text-[10px] text-slate-500">Balance</span>
+                <span className="text-sm font-black text-cyan-300">Ksh {balance.toLocaleString()}</span>
               </div>
             </div>
-
-            <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <InfoChip label="Status" value={assessmentStatus === "completed" ? `Level ${performanceLevel}` : "Assessment pending"} />
-              <InfoChip label="Balance" value={`Ksh ${balance.toLocaleString()}`} />
-              <InfoChip label="Courses" value={dashboard.enrollments.length.toString()} />
-              <InfoChip label="Messages" value={dashboard.messages.length.toString()} />
-            </div>
-          </div>
-        </GlassPanel>
-
-        <div className="space-y-6">
-          <GlassPanel className="p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <SectionLabel>Available Services</SectionLabel>
-                <h3 className="mt-3 text-2xl font-black text-white">Charges & quick actions</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => openProfile("deposit")}
-                className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-cyan-300 transition hover:bg-cyan-400/20"
-              >
-                Top Up
-              </button>
-            </div>
-            <div className="mt-5 max-h-[26rem] space-y-3 overflow-y-auto pr-1">
-              {serviceCharges.map((service) => {
-                const meta = serviceActions[service.service_key] || {};
-                const charge = Number(service.charge_ksh || 0);
-                const enabled = Number(service.active || 0) === 1;
-                const blocked = charge > 0 && !canAfford(charge);
-                return (
-                  <button
-                    key={service.service_key}
-                    type="button"
-                    onClick={() => {
-                      if (!enabled) return;
-                      if (service.service_key === "profile_update") {
-                        openProfile("edit");
-                        return;
-                      }
-                      if (blocked) {
-                        openProfile("deposit");
-                        return;
-                      }
-                      if (meta.route) {
-                        goTo(meta.route);
-                      }
-                    }}
-                    className={`flex w-full items-center justify-between gap-4 rounded-[1.5rem] border px-4 py-4 text-left transition ${
-                      enabled
-                        ? "border-white/10 bg-white/5 hover:border-cyan-400/30 hover:bg-cyan-400/10"
-                        : "border-white/5 bg-white/5 opacity-60"
-                    }`}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-black uppercase tracking-[0.18em] text-white">{service.label}</p>
-                      <p className="mt-1 text-xs leading-5 text-slate-400">{service.description}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-black text-cyan-300">Ksh {charge.toLocaleString()}</p>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                        {!enabled ? "Disabled" : blocked ? "Top up required" : meta.label || "Open"}
-                      </p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </GlassPanel>
-
-          <GlassPanel className="p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <SectionLabel>Activity</SectionLabel>
-                <h3 className="mt-3 text-2xl font-black text-white">Recent balance activity</h3>
-              </div>
-              <FaHistory className="text-2xl text-cyan-300" />
-            </div>
-            <div className="mt-5 space-y-3">
-              {recentTransactions.slice(0, 5).map((item) => (
-                <div key={item.id} className="rounded-[1.35rem] border border-white/10 bg-white/5 px-4 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-bold text-white">{item.description || item.type}</p>
-                      <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{item.type}</p>
-                    </div>
-                    <p className={`text-sm font-black ${Number(item.amount || 0) < 0 ? "text-rose-300" : "text-emerald-300"}`}>
-                      {Number(item.amount || 0) < 0 ? "-" : "+"}Ksh {Math.abs(Number(item.amount || 0)).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
+            <nav className="space-y-0.5 p-2">
+              {sidebarNav.map(({ id, Icon, label }) => (
+                <button key={id} type="button" onClick={() => setActiveSection(id)}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${
+                    activeSection === id
+                      ? "bg-cyan-500/20 font-bold text-cyan-300"
+                      : "font-medium text-slate-400 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  <Icon className={`flex-shrink-0 text-[15px] ${activeSection === id ? "text-cyan-400" : "text-slate-600"}`} />
+                  {label}
+                </button>
               ))}
-              {recentTransactions.length === 0 && (
-                <p className="rounded-[1.35rem] border border-white/10 bg-white/5 px-4 py-5 text-sm text-slate-400">
-                  No balance activity yet.
-                </p>
-              )}
+            </nav>
+            <div className="border-t border-white/10 p-2">
+              <button type="button" onClick={logout}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-rose-400 transition hover:bg-rose-500/10"
+              >
+                <FaMinusCircle className="flex-shrink-0 text-[15px]" /> Sign Out
+              </button>
             </div>
-          </GlassPanel>
-        </div>
-      </div>
+          </div>
+        </aside>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        {isStudent && assessmentStatus === "completed" && (
-          <GlassPanel className="p-8">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <SectionLabel>Your Roadmap</SectionLabel>
-                <h2 className="mt-3 text-2xl font-black text-white">Recommended Resources</h2>
-              </div>
-              <FaBookOpen className="text-4xl text-cyan-300" />
-            </div>
-            <div className="mt-8 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/5 bg-slate-900/40 p-5">
-                <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Digital</p>
-                <h4 className="mt-2 text-xl font-black text-white">Workbook - Lvl {performanceLevel}</h4>
-                <button className="mt-4 flex items-center gap-2 text-sm font-black text-cyan-300 hover:underline">
-                  <FaLink /> Download
-                </button>
-              </div>
-              <div className="rounded-2xl border border-white/5 bg-slate-900/40 p-5">
-                <p className="text-xs font-black uppercase tracking-widest text-amber-400">Physical</p>
-                <h4 className="mt-2 text-xl font-black text-white">Activity Kit</h4>
-                <button className="mt-4 flex items-center gap-2 text-sm font-black text-amber-300 hover:underline">
-                  <FaWhatsapp /> Request
-                </button>
-              </div>
-            </div>
-          </GlassPanel>
-        )}
+        {/* Section Content */}
+        <div className="min-w-0 flex-1">
+          {/* PROFILE section */}
+          {activeSection === "profile" && (
+            <div className="space-y-6">
+              <div className="overflow-hidden rounded-[2rem] border border-white/15 bg-slate-900/80 shadow-2xl shadow-black/40 backdrop-blur-xl">
+                <div className="relative h-44 bg-gradient-to-br from-cyan-700/50 via-blue-700/40 to-indigo-900/60">
+                  <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(34,211,238,0.25),transparent_55%),radial-gradient(ellipse_at_bottom_right,rgba(99,102,241,0.3),transparent_55%)]" />
+                  <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAxOGMxLjIgMCAyLjQtLjUgMy4yLTEuNHMxLjMtMi4xIDEuMy0zLjMtLjUtMi40LTEuMy0zLjItMS45LTEuMy0zLjItMS4zLTIuNC41LTMuMiAxLjMtMS4zIDItMS4zIDMuMi41IDIuNCAxLjMgMy4yIDEuOSAxLjMgMy4yIDEuM3ptLTEyIDBjMS4yIDAgMi40LS41IDMuMi0xLjRzMS4zLTIuMSAxLjMtMy4zLS41LTIuNC0xLjMtMy4yLTEuOS0xLjMtMy4yLTEuMy0yLjQuNS0zLjIgMS4zLTEuMyAyLTEuMyAzLjIuNSAyLjQgMS4zIDMuMiAxLjkgMS4zIDMuMiAxLjN6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDMpIi8+PC9nPjwvc3ZnPg==')] opacity-40" />
+                </div>
 
-        {isTeacher && (
-          <GlassPanel className="p-8">
-            <SectionLabel>Teacher Tools</SectionLabel>
-            <h2 className="mt-3 text-2xl font-black text-white">Problem-Solving Log</h2>
-            <div className="mt-6 overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="text-[10px] uppercase tracking-widest text-slate-500">
-                    <th className="pb-4">Student</th>
-                    <th className="pb-4">Balance</th>
-                    <th className="pb-4">Level</th>
-                    <th className="pb-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {allStudents.map((s) => (
-                    <tr key={s.id}>
-                      <td className="py-5 font-black text-white text-lg">
-                        {s.full_name}
-                        <div className="text-xs font-normal text-slate-500">{s.email}</div>
-                      </td>
-                      <td className="py-5 font-bold text-cyan-300">Ksh {(Number(s.balance || 0)).toLocaleString()}</td>
-                      <td className="py-5 text-cyan-300 font-bold">Lvl {s.performance_level}</td>
-                      <td className="py-5 text-right">
-                        <button
-                          onClick={() => setEditingIep(s)}
-                          className="rounded-lg border border-cyan-400/30 px-3 py-1 text-xs font-black uppercase text-cyan-400 transition hover:bg-cyan-400 hover:text-slate-900"
-                        >
-                          Edit IEP
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {allStudents.length === 0 && (
-                    <tr>
-                      <td colSpan="4" className="py-10 text-center text-slate-500 font-bold">No students found.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            {editingIep && (
-              <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-                <GlassPanel className="w-full max-w-md p-8">
-                  <SectionLabel>Edit IEP</SectionLabel>
-                  <h2 className="mt-2 text-2xl font-black text-white">{editingIep.full_name}</h2>
-                  <div className="mt-6 space-y-6">
-                    <label className="block">
-                      <span className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-400">Assessment Status</span>
-                      <select
-                        className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-cyan-400"
-                        value={editingIep.assessment_status}
-                        onChange={(e) => setEditingIep({ ...editingIep, assessment_status: e.target.value })}
+                <div className="px-6 pb-8 sm:px-10">
+                  <div className="-mt-16 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <button
+                      type="button"
+                      onClick={() => openProfile("view")}
+                      className="group relative h-32 w-32 flex-shrink-0 overflow-hidden rounded-full border-4 border-slate-900 bg-slate-800 shadow-2xl shadow-black/60 transition-transform hover:scale-105"
+                    >
+                      {profileAvatar ? (
+                        <img src={profileAvatar} alt={fullName} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-cyan-800 to-blue-900 text-4xl font-black text-cyan-200">
+                          {fullName?.[0]?.toUpperCase() || "Q"}
+                        </div>
+                      )}
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-all group-hover:bg-black/40">
+                        <FaEdit className="scale-0 text-xl text-white transition-transform group-hover:scale-100" />
+                      </div>
+                    </button>
+
+                    <div className="flex flex-wrap gap-2 pb-1">
+                      <button
+                        type="button"
+                        onClick={() => openProfile("edit")}
+                        className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-bold text-white backdrop-blur-sm transition hover:border-white/30 hover:bg-white/15"
                       >
-                        <option value="waiting">Waiting</option>
-                        <option value="completed">Completed</option>
-                      </select>
-                    </label>
-                    <label className="block">
-                      <span className="mb-2 block text-xs font-bold uppercase tracking-widest text-slate-400">Performance Level</span>
-                      <select
-                        className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-white outline-none focus:border-cyan-400"
-                        value={editingIep.performance_level}
-                        onChange={(e) => setEditingIep({ ...editingIep, performance_level: Number(e.target.value) })}
+                        <FaEdit className="text-xs" /> Edit Profile
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openProfile("deposit")}
+                        className="inline-flex items-center gap-2 rounded-full bg-cyan-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-400"
                       >
-                        {[0, 1, 2, 3, 4, 5].map((lvl) => (
-                          <option key={lvl} value={lvl}>Level {lvl}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="flex gap-3 pt-4">
-                      <ActionButton
-                        className="flex-1 !py-3 !text-sm"
-                        onClick={() => {
-                          onUpdateIep(editingIep.id, editingIep.assessment_status, editingIep.performance_level);
-                          setEditingIep(null);
-                        }}
+                        <FaWallet className="text-xs" /> Deposit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openProfile("withdraw")}
+                        className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-bold text-white backdrop-blur-sm transition hover:border-white/30 hover:bg-white/15"
                       >
-                        Save Changes
-                      </ActionButton>
-                      <SecondaryButton className="flex-1 !py-3 !text-sm" onClick={() => setEditingIep(null)}>
-                        Cancel
-                      </SecondaryButton>
+                        <FaMinusCircle className="text-xs" /> Withdraw
+                      </button>
+                      <button
+                        type="button"
+                        onClick={logout}
+                        className="inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-5 py-2.5 text-sm font-bold text-rose-300 transition hover:bg-rose-500/20"
+                      >
+                        Logout
+                      </button>
                     </div>
+                  </div>
+
+                  <div className="mt-5">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">{fullName}</h2>
+                      <span className="rounded-full bg-cyan-500/20 px-3 py-1 text-xs font-black uppercase tracking-widest text-cyan-300">
+                        {roleLabel}
+                      </span>
+                      {assessmentStatus === "completed" && (
+                        <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-black uppercase tracking-widest text-emerald-300">
+                          Level {performanceLevel}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">
+                      {isTeacher
+                        ? "Teacher · Tracking learners, updating IEPs, and sending focused guidance."
+                        : isParent
+                          ? "Parent · Account balance, messages, and learner support hub."
+                          : "Student · Learning progress, balance, and premium services."}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-slate-500">
+                      <span className="flex items-center gap-1.5"><FaEnvelope className="text-xs text-slate-600" />{dashboard.student.email}</span>
+                      {dashboard.student.whatsapp && (
+                        <span className="flex items-center gap-1.5"><FaWhatsapp className="text-xs text-slate-600" />{dashboard.student.whatsapp}</span>
+                      )}
+                      {profileUpdateCharge > 0 && (
+                        <span className="text-amber-400/80">Profile edits cost Ksh {profileUpdateCharge.toLocaleString()}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex flex-wrap gap-3 border-t border-white/10 pt-6">
+                    {[
+                      { label: "Balance", value: `Ksh ${balance.toLocaleString()}`, color: "text-cyan-300", bg: "bg-cyan-500/10 border-cyan-500/20" },
+                      { label: "Courses", value: dashboard.enrollments.length, color: "text-white", bg: "bg-white/5 border-white/10" },
+                      { label: "Messages", value: dashboard.messages.length, color: "text-white", bg: "bg-white/5 border-white/10" },
+                      { label: "Status", value: assessmentStatus === "completed" ? "Assessed" : "Pending", color: assessmentStatus === "completed" ? "text-emerald-300" : "text-amber-300", bg: assessmentStatus === "completed" ? "bg-emerald-500/10 border-emerald-500/20" : "bg-amber-500/10 border-amber-500/20" },
+                    ].map(({ label, value, color, bg }) => (
+                      <div key={label} className={`flex items-center gap-2 rounded-full border px-4 py-2 ${bg}`}>
+                        <span className="text-xs font-semibold text-slate-500">{label}</span>
+                        <span className={`text-sm font-black ${color}`}>{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+                <div className="space-y-6">
+                  {/* Course messages */}
+                  {hasCourses && (
+                    <GlassPanel className="p-6 sm:p-8">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <SectionLabel>Course Admin</SectionLabel>
+                          <h3 className="mt-2 text-xl font-black text-white">Materials & Updates</h3>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowMessages(!showMessages)}
+                          className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-cyan-300 transition hover:bg-cyan-400/20"
+                        >
+                          {showMessages ? "Hide" : "View All"}
+                        </button>
+                      </div>
+                      {!showMessages && (
+                        <p className="mt-3 text-sm text-slate-500">{dashboard.messages.length} message{dashboard.messages.length !== 1 ? "s" : ""} from your instructor.</p>
+                      )}
+                      {showMessages && (
+                        <div className="mt-5 space-y-3">
+                          {dashboard.messages.length === 0 && (
+                            <p className="rounded-2xl border border-white/5 bg-white/5 px-5 py-4 text-sm text-slate-500">No messages yet.</p>
+                          )}
+                          {dashboard.messages.map((message) => (
+                            <div key={message.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-5">
+                              <h4 className="font-bold text-white">{message.subject}</h4>
+                              <p className="mt-2 text-sm leading-6 text-slate-400">{message.body}</p>
+                              {message.pdfLinks.map((link, idx) => (
+                                <a key={idx} href={link} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-cyan-400 hover:text-white transition">
+                                  <FaLink /> Open Material
+                                </a>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </GlassPanel>
+                  )}
+
+                  {/* Student roadmap */}
+                  {isStudent && assessmentStatus === "completed" && (
+                    <GlassPanel className="p-6 sm:p-8">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <SectionLabel>Learning Roadmap</SectionLabel>
+                          <h3 className="mt-2 text-xl font-black text-white">Recommended Resources</h3>
+                        </div>
+                        <FaBookOpen className="text-3xl text-cyan-300" />
+                      </div>
+                      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-5">
+                          <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Digital</p>
+                          <h4 className="mt-2 text-lg font-black text-white">Workbook · Level {performanceLevel}</h4>
+                          <button className="mt-4 flex items-center gap-2 text-sm font-bold text-cyan-300 hover:text-white transition">
+                            <FaLink /> Download
+                          </button>
+                        </div>
+                        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-5">
+                          <p className="text-xs font-black uppercase tracking-widest text-amber-400">Physical</p>
+                          <h4 className="mt-2 text-lg font-black text-white">Activity Kit</h4>
+                          <button className="mt-4 flex items-center gap-2 text-sm font-bold text-amber-300 hover:text-white transition">
+                            <FaWhatsapp /> Request via WhatsApp
+                          </button>
+                        </div>
+                      </div>
+                    </GlassPanel>
+                  )}
+
+                  {/* Teacher: learner roster */}
+                  {isTeacher && (
+                    <GlassPanel className="p-6 sm:p-8">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                          <SectionLabel>Teacher Tools</SectionLabel>
+                          <h3 className="mt-2 text-xl font-black text-white">Parent-registered children</h3>
+                          <p className="mt-2 text-sm text-slate-500">Only learners registered by parents appear here.</p>
+                        </div>
+                        <div className="w-full max-w-xl rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+                          <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Your specializations</p>
+                          <textarea
+                            rows="3"
+                            value={teacherSpecializationsDraft}
+                            onChange={(event) => setTeacherSpecializationsDraft(event.target.value)}
+                            placeholder="Math, English, literacy, CBC support, exam prep"
+                            className="mt-3 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/60"
+                          />
+                          <div className="mt-3 flex flex-wrap gap-3">
+                            <button
+                              type="button"
+                              onClick={saveTeacherSpecializations}
+                              className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-cyan-200"
+                            >
+                              Save specializations
+                            </button>
+                            <span className="text-xs text-slate-500">These help parents find and contact you.</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 grid gap-3">
+                        {teacherChildren.length === 0 && (
+                          <p className="rounded-2xl border border-white/5 bg-white/5 px-4 py-5 text-center text-sm text-slate-500">No parent-registered children yet.</p>
+                        )}
+                        {teacherChildren.map((child) => {
+                          const whatsappDigits = String(child.parent_whatsapp || "").replace(/\D/g, "");
+                          const whatsappHref = whatsappDigits
+                            ? `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(`Hello ${child.parent_name || "parent"}, I am reaching out about ${child.child_name || "your child"}.`)}`
+                            : null;
+                          return (
+                            <div key={child.id} className="rounded-[1.5rem] border border-white/10 bg-slate-950/50 p-4">
+                              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                  <p className="text-lg font-black text-white">{child.child_name}</p>
+                                  <p className="mt-1 text-sm text-slate-300">Grade {child.grade_level}</p>
+                                  <p className="mt-1 text-sm text-slate-400">Parent: {child.parent_name}</p>
+                                  <p className="mt-2 text-sm leading-7 text-slate-300">Goals: {child.goals}</p>
+                                </div>
+                                {whatsappHref && (
+                                  <a href={whatsappHref} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-full bg-emerald-400 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-emerald-300">
+                                    WhatsApp parent
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </GlassPanel>
+                  )}
+
+                  {/* Parent quick-links */}
+                  {isParent && (
+                    <GlassPanel className="p-6 sm:p-8">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <SectionLabel>Parent Hub</SectionLabel>
+                          <h3 className="mt-2 text-xl font-black text-white">Support your child's learning</h3>
+                          <p className="mt-2 text-sm text-slate-500">Register children, set goals, and open the materials workspace for grade-specific packs.</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => goTo("resources")}
+                          className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-cyan-200"
+                        >
+                          Open materials
+                        </button>
+                      </div>
+
+                      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        <button
+                          type="button"
+                          onClick={() => goTo("resources")}
+                          className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
+                        >
+                          <div className="rounded-xl bg-cyan-500/10 p-3"><FaBookOpen className="text-lg text-cyan-300" /></div>
+                          <div>
+                            <p className="font-bold text-white">Purchase Materials</p>
+                            <p className="text-xs text-slate-500">Ksh 10 downloads</p>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => goTo("teachers")}
+                          className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
+                        >
+                          <div className="rounded-xl bg-emerald-500/10 p-3"><FaEnvelope className="text-lg text-emerald-300" /></div>
+                          <div>
+                            <p className="font-bold text-white">Contact Teacher</p>
+                            <p className="text-xs text-slate-500">Recommended matches</p>
+                          </div>
+                        </button>
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                          <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Registered children</p>
+                          <p className="mt-2 text-2xl font-black text-white">{dashboard.children.length}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-6 space-y-3">
+                        {dashboard.children.length === 0 ? (
+                          <p className="rounded-2xl border border-white/5 bg-white/5 px-4 py-5 text-center text-sm text-slate-500">No children registered yet.</p>
+                        ) : (
+                          dashboard.children.map((child) => (
+                            <div key={`${child.child_name}-${child.created_at}`} className="rounded-[1.5rem] border border-white/10 bg-slate-950/50 p-4">
+                              <p className="text-lg font-black text-white">{child.child_name}</p>
+                              <p className="mt-1 text-sm text-slate-300">Grade {child.grade_level}</p>
+                              <p className="mt-2 text-sm leading-7 text-slate-400">Goals: {child.goals}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </GlassPanel>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* BALANCE section */}
+          {activeSection === "balance" && (
+            <div className="space-y-6">
+              <div className="overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-slate-900/90 to-slate-800/80 p-8 backdrop-blur-xl">
+                <SectionLabel>Account Balance</SectionLabel>
+                <p className="mt-3 text-6xl font-black text-white">Ksh {balance.toLocaleString()}</p>
+                <p className="mt-1 text-sm text-slate-500">Available funds</p>
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <button type="button" onClick={() => openProfile("deposit")} className="inline-flex items-center gap-2 rounded-full bg-cyan-500 px-6 py-3 font-bold text-slate-950 transition hover:bg-cyan-400">
+                    <FaWallet /> Deposit via M-Pesa
+                  </button>
+                  <button type="button" onClick={() => openProfile("withdraw")} className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-6 py-3 font-bold text-white transition hover:bg-white/15">
+                    <FaMinusCircle /> Withdraw
+                  </button>
+                </div>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <GlassPanel className="p-6">
+                  <p className="mb-4 text-xs font-black uppercase tracking-widest text-cyan-400">Deposits</p>
+                  <div className="space-y-2">
+                    {recentDeposits.length === 0
+                      ? <p className="text-sm text-slate-600">No deposits yet.</p>
+                      : recentDeposits.map(item => (
+                        <div key={item.id} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 px-4 py-3">
+                          <span className={`text-xs font-bold uppercase ${item.status === "verified" ? "text-emerald-400" : item.status === "rejected" ? "text-rose-400" : "text-amber-400"}`}>{item.status}</span>
+                          <span className="font-bold text-white">Ksh {Number(item.amount || 0).toLocaleString()}</span>
+                        </div>
+                      ))}
+                  </div>
+                </GlassPanel>
+                <GlassPanel className="p-6">
+                  <p className="mb-4 text-xs font-black uppercase tracking-widest text-rose-400">Withdrawals</p>
+                  <div className="space-y-2">
+                    {recentWithdrawals.length === 0
+                      ? <p className="text-sm text-slate-600">No withdrawals yet.</p>
+                      : recentWithdrawals.map(item => (
+                        <div key={item.id} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 px-4 py-3">
+                          <span className={`text-xs font-bold uppercase ${item.status === "processed" ? "text-emerald-400" : item.status === "rejected" ? "text-rose-400" : "text-amber-400"}`}>{item.status}</span>
+                          <span className="font-bold text-white">Ksh {Number(item.amount || 0).toLocaleString()}</span>
+                        </div>
+                      ))}
                   </div>
                 </GlassPanel>
               </div>
-            )}
-          </GlassPanel>
-        )}
-
-        {isParent && (
-          <GlassPanel className="p-8">
-            <SectionLabel>Support My Child</SectionLabel>
-            <div className="mt-6 space-y-3">
-              <SecondaryButton className="w-full !justify-start" onClick={() => window.location.hash = "resources"}>
-                <FaBookOpen className="text-cyan-300" />
-                <span>Purchase Materials</span>
-              </SecondaryButton>
-              <SecondaryButton className="w-full !justify-start">
-                <FaEnvelope className="text-cyan-300" />
-                <span>Contact Teacher</span>
-              </SecondaryButton>
+              <GlassPanel className="p-6">
+                <p className="mb-4 text-xs font-black uppercase tracking-widest text-cyan-400">Transaction History</p>
+                <div className="space-y-2">
+                  {recentTransactions.length === 0
+                    ? <p className="py-8 text-center text-sm text-slate-600">No transactions yet.</p>
+                    : recentTransactions.map(item => {
+                        const amt = Number(item.amount || 0);
+                        return (
+                          <div key={item.id} className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/5 px-4 py-3">
+                            <div className={`h-8 w-8 flex-shrink-0 rounded-full flex items-center justify-center text-xs ${amt >= 0 ? "bg-emerald-500/15 text-emerald-400" : "bg-rose-500/15 text-rose-400"}`}>{amt >= 0 ? "+" : "−"}</div>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-bold text-white">{item.description || item.type}</p>
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-600">{item.type}</p>
+                            </div>
+                            <p className={`flex-shrink-0 text-sm font-black ${amt >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{amt >= 0 ? "+" : "−"}Ksh {Math.abs(amt).toLocaleString()}</p>
+                          </div>
+                        );
+                      })}
+                </div>
+              </GlassPanel>
             </div>
-          </GlassPanel>
-        )}
+          )}
 
-        {hasTournament && (
-          <GlassPanel className="p-8">
-            <div className="flex items-center justify-between">
+          {/* SERVICES section */}
+          {activeSection === "services" && (
+            <GlassPanel className="p-6 sm:p-8">
+              <div className="mb-6 flex items-center justify-between gap-4">
+                <div>
+                  <SectionLabel>Platform Services</SectionLabel>
+                  <h3 className="mt-2 text-2xl font-black text-white">Available charges</h3>
+                </div>
+                <button type="button" onClick={() => openProfile("deposit")} className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-4 py-2 text-xs font-black uppercase tracking-widest text-cyan-400 transition hover:bg-cyan-500/20">Top Up</button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {serviceCharges.map((service) => {
+                  const meta = serviceActions[service.service_key] || {};
+                  const charge = Number(service.charge_ksh || 0);
+                  const enabled = Number(service.active || 0) === 1;
+                  const blocked = charge > 0 && !canAfford(charge);
+                  return (
+                    <button key={service.service_key} type="button" disabled={!enabled}
+                      onClick={() => {
+                        if (!enabled) return;
+                        if (service.service_key === "profile_update") { openProfile("edit"); return; }
+                        if (blocked) { openProfile("deposit"); return; }
+                        if (meta.route) goTo(meta.route);
+                      }}
+                      className={`rounded-2xl border p-5 text-left transition ${!enabled ? "cursor-default border-white/5 bg-white/5 opacity-40" : blocked ? "cursor-pointer border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10" : "cursor-pointer border-white/10 bg-white/5 hover:border-cyan-400/30 hover:bg-cyan-400/5"}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-white">{service.label}</p>
+                          <p className="mt-1 text-xs leading-5 text-slate-500">{service.description}</p>
+                        </div>
+                        <div className="flex-shrink-0 text-right">
+                          <p className="text-lg font-black text-cyan-300">{charge > 0 ? `Ksh ${charge.toLocaleString()}` : "Free"}</p>
+                          <p className={`text-[10px] font-bold uppercase tracking-wide ${!enabled ? "text-slate-600" : blocked ? "text-rose-400" : "text-emerald-400"}`}>{!enabled ? "Disabled" : blocked ? "Top up needed" : meta.label || "Available"}</p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+                {serviceCharges.length === 0 && <p className="col-span-2 py-8 text-center text-sm text-slate-600">No services configured.</p>}
+              </div>
+            </GlassPanel>
+          )}
+
+          {/* ACTIVITY section */}
+          {activeSection === "activity" && (
+            <GlassPanel className="p-6 sm:p-8">
+              <SectionLabel>Activity Feed</SectionLabel>
+              <h3 className="mt-2 mb-6 text-2xl font-black text-white">All transactions</h3>
+              <div className="space-y-2">
+                {recentTransactions.length === 0
+                  ? <p className="py-12 text-center text-sm text-slate-600">No activity yet.</p>
+                  : recentTransactions.map(item => {
+                      const amt = Number(item.amount || 0);
+                      return (
+                        <div key={item.id} className="flex items-center gap-4 rounded-2xl border border-white/5 bg-white/5 px-5 py-4">
+                          <div className={`h-10 w-10 flex-shrink-0 rounded-full flex items-center justify-center font-black ${amt >= 0 ? "bg-emerald-500/15 text-emerald-300" : "bg-rose-500/15 text-rose-300"}`}>{amt >= 0 ? "+" : "−"}</div>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-white">{item.description || item.type}</p>
+                            <p className="mt-0.5 text-xs uppercase tracking-wide text-slate-500">{item.type} · {item.status}</p>
+                          </div>
+                          <p className={`flex-shrink-0 text-lg font-black ${amt >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{amt >= 0 ? "+" : "−"}Ksh {Math.abs(amt).toLocaleString()}</p>
+                        </div>
+                      );
+                    })}
+              </div>
+            </GlassPanel>
+          )}
+
+          {/* MATERIALS section - Parent Only */}
+          {activeSection === "materials" && isParent && (
+            <div className="space-y-6 rounded-[2rem] border border-white/10 bg-slate-950/90 p-6 sm:p-8">
               <div>
-                <SectionLabel>E-Sports</SectionLabel>
-                <h2 className="mt-3 text-3xl font-black text-white">{tournamentInfo.title}</h2>
+                <SectionLabel>Generate Learning Materials</SectionLabel>
+                <h2 className="mt-2 text-3xl font-black text-white">Create materials for your child</h2>
+                <p className="mt-2 text-sm text-slate-400">Select a grade and describe what you need. Materials are automatically generated.</p>
               </div>
-              <FaTrophy className="text-4xl text-amber-300" />
-            </div>
-            {dashboard.tournament && (
-              <div className="mt-6 overflow-x-auto">
-                <table className="min-w-full text-left text-sm text-slate-200">
-                  <thead className="text-[10px] uppercase tracking-widest text-slate-500">
-                    <tr>
-                      <th className="pb-3">Player</th>
-                      <th className="pb-3">P</th>
-                      <th className="pb-3">GD</th>
-                      <th className="pb-3">Pts</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dashboard.tournament.standings.map((row) => (
-                      <tr key={row.registrationId} className="border-t border-white/5">
-                        <td className="py-3 font-semibold text-white">{row.name}</td>
-                        <td className="py-3">{row.played}</td>
-                        <td className="py-3">{row.goalDifference}</td>
-                        <td className="py-3 font-bold text-cyan-300">{row.points}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </GlassPanel>
-        )}
 
-        {hasCourses && (
-          <GlassPanel className="p-8">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <SectionLabel>Course Admin</SectionLabel>
-                <h2 className="mt-3 text-2xl font-black text-white">Materials & Updates</h2>
-              </div>
-              <ActionButton onClick={() => setShowMessages(!showMessages)} className="!px-4 !py-2 text-xs">
-                {showMessages ? "Hide" : "View"}
-              </ActionButton>
-            </div>
-            {showMessages && (
-              <div className="mt-6 space-y-4">
-                {dashboard.messages.map((message) => (
-                  <div key={message.id} className="rounded-2xl border border-white/5 bg-slate-900/60 p-5">
-                    <h4 className="font-bold text-white">{message.subject}</h4>
-                    <p className="mt-2 text-sm text-slate-400">{message.body}</p>
-                    {message.pdfLinks.map((link, idx) => (
-                      <a key={idx} href={link} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-cyan-400 hover:text-white transition">
-                        <FaLink /> Open Material
-                      </a>
+              <div className="flex flex-wrap items-center gap-4">
+                <div>
+                  <label className="block text-xs font-black uppercase tracking-[0.3em] text-slate-400 mb-2">Grade</label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((grade) => (
+                      <button
+                        key={grade}
+                        type="button"
+                        onClick={() => setParentGradeLevel(String(grade))}
+                        className={`rounded-xl border px-4 py-2 text-sm font-black transition ${
+                          String(parentGradeLevel) === String(grade)
+                            ? "border-cyan-300 bg-cyan-300 text-slate-950"
+                            : "border-white/10 bg-white/5 text-white hover:border-cyan-400/40 hover:bg-cyan-400/10"
+                        }`}
+                      >
+                        {grade}
+                      </button>
                     ))}
                   </div>
-                ))}
+                </div>
               </div>
-            )}
-          </GlassPanel>
-        )}
+
+              <label className="block space-y-3">
+                <span className="text-xs font-black uppercase tracking-[0.3em] text-slate-400">Describe what you want</span>
+                <textarea
+                  rows="4"
+                  value={parentPrompt}
+                  onChange={(event) => setParentPrompt(event.target.value)}
+                  placeholder="Example: make revision notes and exercises for Grade 4 fractions with simple answers"
+                  className="w-full rounded-[1.5rem] border border-white/10 bg-slate-950/80 px-4 py-4 text-white outline-none placeholder:text-slate-600 focus:border-cyan-300/60"
+                />
+              </label>
+
+              {parentLoadingMaterial && (
+                <div className="text-sm text-cyan-300">Generating materials...</div>
+              )}
+
+              {parentStatus && <Notice tone={parentStatus.toLowerCase().includes("ready") ? "info" : "error"}>{parentStatus}</Notice>}
+
+              {parentMaterialBody && (
+                <div className="rounded-[2rem] border border-cyan-400/20 bg-cyan-400/5 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-300">Preview</p>
+                    <button
+                      onClick={downloadParentMaterials}
+                      disabled={parentDownloading}
+                      className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-2 text-xs font-black text-emerald-200 transition hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {parentDownloading ? "Downloading..." : "Download for Ksh 10"}
+                    </button>
+                  </div>
+                  <h3 className="text-2xl font-black text-white">{parentMaterialTitle || `Grade ${parentGradeLevel} materials`}</h3>
+                  <pre className="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-300 max-h-96 overflow-y-auto">{parentMaterialBody}</pre>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* COURSES section */}
+          {activeSection === "courses" && (
+            <GlassPanel className="p-6 sm:p-8">
+              <SectionLabel>Course Admin</SectionLabel>
+              <h3 className="mt-2 mb-6 text-2xl font-black text-white">Materials &amp; Updates</h3>
+              <div className="space-y-4">
+                {dashboard.messages.length === 0
+                  ? <p className="py-12 text-center text-sm text-slate-600">No messages from your instructor yet.</p>
+                  : dashboard.messages.map(message => (
+                    <div key={message.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-5">
+                      <h4 className="font-bold text-white">{message.subject}</h4>
+                      <p className="mt-2 text-sm leading-6 text-slate-400">{message.body}</p>
+                      {message.pdfLinks.map((link, idx) => (
+                        <a key={idx} href={link} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-cyan-400 transition hover:text-white">
+                          <FaLink /> Open Material
+                        </a>
+                      ))}
+                    </div>
+                  ))}
+              </div>
+            </GlassPanel>
+          )}
+
+          {/* ROADMAP section */}
+          {activeSection === "roadmap" && (
+            <GlassPanel className="p-6 sm:p-8">
+              <SectionLabel>Learning Roadmap</SectionLabel>
+              <h3 className="mt-2 mb-8 text-2xl font-black text-white">Level {performanceLevel} Recommendations</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-6">
+                  <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Digital</p>
+                  <h4 className="mt-2 text-lg font-black text-white">Workbook · Level {performanceLevel}</h4>
+                  <p className="mt-2 text-sm text-slate-500">Personalized digital exercises and assessments.</p>
+                </div>
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-6">
+                  <p className="text-xs font-black uppercase tracking-widest text-amber-400">Physical</p>
+                  <h4 className="mt-2 text-lg font-black text-white">Activity Kit</h4>
+                  <p className="mt-2 text-sm text-slate-500">Hands-on learning materials and workbooks.</p>
+                  <button className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-amber-300 transition hover:text-white"><FaWhatsapp /> Request via WhatsApp</button>
+                </div>
+              </div>
+            </GlassPanel>
+          )}
+
+          {/* ROSTER section - Teacher only */}
+          {activeSection === "roster" && isTeacher && (
+            <GlassPanel className="p-6 sm:p-8">
+              <SectionLabel>Teacher Roster</SectionLabel>
+              <h3 className="mt-2 mb-6 text-2xl font-black text-white">Your Learners</h3>
+              <div className="space-y-4">
+                {teacherChildren.length === 0 ? (
+                  <p className="py-12 text-center text-sm text-slate-600">No learners assigned to you yet.</p>
+                ) : (
+                  teacherChildren.map((child) => (
+                    <div key={child.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-5">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h4 className="font-bold text-white">{child.child_name}</h4>
+                          <p className="text-sm text-slate-400">Grade {child.grade_level}</p>
+                          <p className="text-sm text-slate-400">Parent: {child.parent_name}</p>
+                          <p className="mt-2 text-sm text-slate-300">Goals: {child.goals}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const whatsappDigits = String(child.parent_whatsapp || "").replace(/\D/g, "");
+                            if (whatsappDigits) {
+                              window.open(`https://wa.me/${whatsappDigits}?text=${encodeURIComponent(`Hello ${child.parent_name || "parent"}, I am reaching out about ${child.child_name || "your child"}.`)}`, "_blank");
+                            }
+                          }}
+                          className="inline-flex items-center gap-2 rounded-full bg-emerald-400 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-emerald-300"
+                        >
+                          <FaWhatsapp /> Contact Parent
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </GlassPanel>
+          )}
+
+          {/* SUPPORT section - Parent only */}
+          {activeSection === "parent" && isParent && (
+            <GlassPanel className="p-6 sm:p-8">
+              <SectionLabel>Parent Support Hub</SectionLabel>
+              <h3 className="mt-2 mb-6 text-2xl font-black text-white">Resources for Parents</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <h4 className="font-bold text-white">Materials Library</h4>
+                  <p className="mt-2 text-sm text-slate-400">Generate and download learning materials for your child's grade level.</p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection("materials")}
+                    className="mt-4 inline-flex items-center gap-2 rounded-full bg-cyan-400 px-4 py-2 text-xs font-black text-slate-950 transition hover:bg-cyan-300"
+                  >
+                    Go to Materials
+                  </button>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <h4 className="font-bold text-white">Connect with Teachers</h4>
+                  <p className="mt-2 text-sm text-slate-400">Find and contact teachers who specialize in your child's learning needs.</p>
+                  <button
+                    type="button"
+                    onClick={() => goTo("teachers")}
+                    className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-400 px-4 py-2 text-xs font-black text-slate-950 transition hover:bg-emerald-300"
+                  >
+                    <FaWhatsapp /> Find Teachers
+                  </button>
+                </div>
+              </div>
+            </GlassPanel>
+          )}
+        </div>
       </div>
 
+      {/* Profile Modal */}
       {profileModalOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-xl">
-          <GlassPanel className="w-full max-w-5xl overflow-hidden border-white/15 bg-slate-950/95 p-0">
+        <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-slate-950/80 p-4 backdrop-blur-xl">
+          <div className="relative my-8 w-full max-w-4xl overflow-hidden rounded-[2rem] border border-white/15 bg-slate-950/98 shadow-2xl">
+            {/* Modal header */}
             <div className="flex items-center justify-between gap-4 border-b border-white/10 px-6 py-5 sm:px-8">
-              <div>
-                <SectionLabel>Profile Hub</SectionLabel>
-                <h3 className="mt-2 text-2xl font-black text-white">{fullName}</h3>
-                <p className="mt-1 text-sm text-slate-400">Edit your profile, top up balance, and manage withdrawals.</p>
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 overflow-hidden rounded-full border border-white/15 bg-slate-800 flex-shrink-0">
+                  {profileAvatar ? (
+                    <img src={profileAvatar} alt={fullName} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-lg font-black text-cyan-300">{fullName?.[0] || "Q"}</div>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-widest text-cyan-400">{roleLabel}</p>
+                  <h3 className="text-lg font-black text-white">{fullName}</h3>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setProfileModalOpen(false)}
-                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.24em] text-white transition hover:bg-white/10"
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-400 hover:text-white transition hover:bg-white/10"
               >
-                Close
+                ✕ Close
               </button>
             </div>
-            <div className="flex flex-wrap gap-2 border-b border-white/10 px-6 py-4 sm:px-8">
-              {[
-                ["view", "Overview"],
-                ["edit", "Edit Profile"],
-                ["deposit", "Deposit"],
-                ["withdraw", "Withdraw"],
-              ].map(([key, label]) => (
+
+            {/* Tab bar */}
+            <div className="flex gap-1 border-b border-white/10 px-6 py-3 sm:px-8">
+              {[["view", "Overview"], ["edit", "Edit Profile"], ["deposit", "Deposit"], ["withdraw", "Withdraw"]].map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
-                  onClick={() => {
-                    setProfileTab(key);
-                    setProfileStatus("");
-                  }}
-                  className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-[0.22em] transition ${
+                  onClick={() => { setProfileTab(key); setProfileStatus(""); }}
+                  className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
                     profileTab === key
-                      ? "bg-cyan-400 text-slate-950"
-                      : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
+                      ? "bg-cyan-500 text-slate-950"
+                      : "text-slate-400 hover:bg-white/10 hover:text-white"
                   }`}
                 >
                   {label}
                 </button>
               ))}
             </div>
-            <div className="grid gap-6 p-6 lg:grid-cols-[0.95fr_1.05fr] sm:p-8">
+
+            {/* Modal body */}
+            <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[280px_1fr]">
+              {/* Left: profile summary */}
               <div className="space-y-4">
-                <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-5">
-                  <div className="flex items-center gap-4">
-                    <div className="h-20 w-20 overflow-hidden rounded-[1.35rem] border border-white/10 bg-slate-900">
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="h-16 w-16 overflow-hidden rounded-full border border-white/15 bg-slate-800 flex-shrink-0">
                       {profileAvatar ? (
                         <img src={profileAvatar} alt={fullName} className="h-full w-full object-cover" />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-slate-900 text-2xl font-black text-cyan-300">
-                          {fullName?.[0] || "Q"}
-                        </div>
+                        <div className="flex h-full w-full items-center justify-center text-xl font-black text-cyan-300">{fullName?.[0] || "Q"}</div>
                       )}
                     </div>
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-300">{roleLabel}</p>
-                      <h4 className="mt-2 text-2xl font-black text-white">{fullName}</h4>
-                      <p className="mt-1 text-sm text-slate-400">{dashboard.student.email}</p>
+                    <div className="min-w-0">
+                      <p className="font-bold text-white truncate">{fullName}</p>
+                      <p className="text-xs text-slate-500 truncate">{dashboard.student.email}</p>
                     </div>
                   </div>
-                  <div className="mt-4 grid gap-2">
-                    <InfoChip label="Balance" value={`Ksh ${balance.toLocaleString()}`} />
-                    <InfoChip label="WhatsApp" value={dashboard.student.whatsapp} />
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center justify-between rounded-xl bg-cyan-500/10 px-3 py-2">
+                      <span className="text-xs text-slate-400">Balance</span>
+                      <span className="text-sm font-black text-cyan-300">Ksh {balance.toLocaleString()}</span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2">
+                      <span className="text-xs text-slate-400">WhatsApp</span>
+                      <span className="text-sm font-bold text-white">{dashboard.student.whatsapp || "—"}</span>
+                    </div>
                   </div>
                 </div>
-                <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-5">
-                  <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300">Recent Deposits</p>
-                  <div className="mt-4 space-y-2">
+
+                {/* Deposits summary */}
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                  <p className="text-xs font-black uppercase tracking-widest text-cyan-400 mb-3">Deposits</p>
+                  <div className="space-y-2">
                     {recentDeposits.slice(0, 3).map((item) => (
-                      <div key={item.id} className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
-                        Ksh {Number(item.amount || 0).toLocaleString()} • {item.status}
+                      <div key={item.id} className="flex items-center justify-between gap-2 rounded-xl border border-white/5 bg-slate-950/60 px-3 py-2">
+                        <span className="text-xs text-slate-400 capitalize">{item.status}</span>
+                        <span className="text-xs font-bold text-white">Ksh {Number(item.amount || 0).toLocaleString()}</span>
                       </div>
                     ))}
-                    {recentDeposits.length === 0 && <p className="text-sm text-slate-500">No deposits yet.</p>}
+                    {recentDeposits.length === 0 && <p className="text-xs text-slate-600">No deposits yet.</p>}
                   </div>
                 </div>
-                <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-5">
-                  <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300">Recent Withdrawals</p>
-                  <div className="mt-4 space-y-2">
+
+                {/* Withdrawals summary */}
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+                  <p className="text-xs font-black uppercase tracking-widest text-rose-400 mb-3">Withdrawals</p>
+                  <div className="space-y-2">
                     {recentWithdrawals.slice(0, 3).map((item) => (
-                      <div key={item.id} className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
-                        Ksh {Number(item.amount || 0).toLocaleString()} • {item.status}
+                      <div key={item.id} className="flex items-center justify-between gap-2 rounded-xl border border-white/5 bg-slate-950/60 px-3 py-2">
+                        <span className="text-xs text-slate-400 capitalize">{item.status}</span>
+                        <span className="text-xs font-bold text-white">Ksh {Number(item.amount || 0).toLocaleString()}</span>
                       </div>
                     ))}
-                    {recentWithdrawals.length === 0 && <p className="text-sm text-slate-500">No withdrawals yet.</p>}
+                    {recentWithdrawals.length === 0 && <p className="text-xs text-slate-600">No withdrawals yet.</p>}
                   </div>
                 </div>
               </div>
 
+              {/* Right: tab content */}
               <div className="space-y-4">
-                {profileStatus && <Notice>{profileStatus}</Notice>}
+                {profileStatus && (
+                  <div className={`rounded-2xl border px-5 py-4 text-sm font-bold ${
+                    profileStatus.toLowerCase().includes("error") || profileStatus.toLowerCase().includes("fail") || profileStatus.toLowerCase().includes("insufficient")
+                      ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
+                      : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                  }`}>
+                    {profileStatus}
+                  </div>
+                )}
 
+                {/* Overview tab */}
                 {profileTab === "view" && (
                   <div className="space-y-4">
-                    <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-5">
-                      <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300">About</p>
-                      <p className="mt-3 text-sm leading-7 text-slate-300">
-                        Keep your profile updated so the QOOHI team can reach you quickly. Your balance is used for paid services, and deposits appear here before admin verification.
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                      <p className="text-xs font-black uppercase tracking-widest text-cyan-400 mb-3">About your account</p>
+                      <p className="text-sm leading-7 text-slate-400">
+                        Keep your profile updated so the QOOHI team can reach you. Your balance funds paid services. Deposits are reviewed by admin before crediting. Withdrawals are sent to your M-Pesa number.
                       </p>
                     </div>
-                    <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-5">
-                      <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300">Activity</p>
-                      <div className="mt-4 space-y-2">
-                        {recentTransactions.slice(0, 4).map((item) => (
-                          <div key={item.id} className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">
-                            {item.description || item.type}
-                          </div>
-                        ))}
-                        {recentTransactions.length === 0 && <p className="text-sm text-slate-500">No recent activity.</p>}
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                      <p className="text-xs font-black uppercase tracking-widest text-cyan-400 mb-4">Recent activity</p>
+                      <div className="space-y-2">
+                        {recentTransactions.slice(0, 5).map((item) => {
+                          const amt = Number(item.amount || 0);
+                          return (
+                            <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-950/60 px-4 py-3 text-sm">
+                              <span className="text-slate-300 truncate">{item.description || item.type}</span>
+                              <span className={`font-bold flex-shrink-0 ${amt >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                                {amt >= 0 ? "+" : "−"}Ksh {Math.abs(amt).toLocaleString()}
+                              </span>
+                            </div>
+                          );
+                        })}
+                        {recentTransactions.length === 0 && <p className="text-sm text-slate-600">No activity yet.</p>}
                       </div>
                     </div>
                   </div>
                 )}
 
+                {/* Edit profile tab */}
                 {profileTab === "edit" && (
-                  <form className="space-y-4 rounded-[1.75rem] border border-white/10 bg-white/5 p-5" onSubmit={saveProfile}>
-                    <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300">Edit Profile</p>
-                    <div className="grid gap-4 sm:grid-cols-[0.8fr_1.2fr]">
-                      <div className="space-y-3">
-                        <div className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-slate-950">
-                          {profileAvatar ? (
-                            <img src={profileAvatar} alt="Preview" className="h-52 w-full object-cover" />
+                  <form className="space-y-6 rounded-2xl border border-white/10 bg-white/5 p-6" onSubmit={saveProfile}>
+                    <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Edit Profile</p>
+
+                    <div className="flex gap-5 items-start">
+                      <div className="flex-shrink-0">
+                        <div className="h-28 w-28 overflow-hidden rounded-full border-2 border-white/20 bg-slate-800">
+                          {profileDraft.avatarUrl ? (
+                            <img src={profileDraft.avatarUrl} alt="Preview" className="h-full w-full object-cover" />
                           ) : (
-                            <div className="flex h-52 items-center justify-center bg-slate-900 text-5xl font-black text-cyan-300">{fullName?.[0] || "Q"}</div>
+                            <div className="flex h-full w-full items-center justify-center text-3xl font-black text-cyan-300">{profileDraft.fullName?.[0]?.toUpperCase() || "Q"}</div>
                           )}
                         </div>
-                        <label className="block rounded-[1.25rem] border border-dashed border-cyan-400/30 bg-cyan-400/5 px-4 py-4 text-center text-sm text-cyan-200 transition hover:bg-cyan-400/10">
-                          <span className="font-bold uppercase tracking-[0.22em]">Choose Picture</span>
+                        <label className="mt-3 block w-28 cursor-pointer rounded-xl border border-dashed border-cyan-400/40 bg-cyan-400/5 py-2 text-center text-[10px] font-black uppercase tracking-widest text-cyan-400 hover:bg-cyan-400/10 transition">
+                          Change
                           <input type="file" accept="image/*" className="hidden" onChange={(e) => handleAvatarFile(e.target.files?.[0])} />
                         </label>
-                        <button
-                          type="button"
-                          onClick={() => setProfileDraft((current) => ({ ...current, avatarUrl: "" }))}
-                          className="w-full rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-300 hover:bg-white/10"
-                        >
-                          Remove Picture
-                        </button>
+                        {profileDraft.avatarUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setProfileDraft((c) => ({ ...c, avatarUrl: "" }))}
+                            className="mt-2 block w-28 rounded-xl border border-rose-500/20 bg-rose-500/5 py-2 text-center text-[10px] font-black uppercase tracking-widest text-rose-400 hover:bg-rose-500/10 transition"
+                          >
+                            Remove
+                          </button>
+                        )}
                       </div>
-                      <div className="space-y-4">
-                        <Input label="Full name" value={profileDraft.fullName} onChange={(value) => setProfileDraft((current) => ({ ...current, fullName: value }))} />
-                        <Input label="WhatsApp" value={profileDraft.whatsapp} onChange={(value) => setProfileDraft((current) => ({ ...current, whatsapp: value }))} />
-                        <InfoChip label="Email" value={dashboard.student.email} />
+                      <div className="flex-1 space-y-4 min-w-0">
+                        <Input label="Full name" value={profileDraft.fullName} onChange={(v) => setProfileDraft((c) => ({ ...c, fullName: v }))} />
+                        <Input label="WhatsApp number" value={profileDraft.whatsapp} onChange={(v) => setProfileDraft((c) => ({ ...c, whatsapp: v }))} />
+                        <div className="rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-500">
+                          <span className="block text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-1">Email (read-only)</span>
+                          {dashboard.student.email}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-3 pt-2">
-                      <ActionButton type="submit" disabled={savingProfile} className="!px-5 !py-3 !text-sm">
+                    {profileUpdateCharge > 0 && (
+                      <p className="text-xs text-amber-400/80">Saving this profile costs Ksh {profileUpdateCharge.toLocaleString()} from your balance.</p>
+                    )}
+                    <div className="flex gap-3 pt-2">
+                      <ActionButton type="submit" disabled={savingProfile} className="!px-6 !py-3 !text-sm">
                         {savingProfile ? "Saving..." : "Save Profile"}
                       </ActionButton>
-                      <SecondaryButton type="button" className="!px-5 !py-3 !text-sm" onClick={() => setProfileTab("view")}>
-                        Cancel
-                      </SecondaryButton>
+                      <SecondaryButton type="button" className="!px-6 !py-3 !text-sm" onClick={() => setProfileTab("view")}>Cancel</SecondaryButton>
                     </div>
                   </form>
                 )}
 
+                {/* Deposit tab */}
                 {profileTab === "deposit" && (
-                  <form className="space-y-4 rounded-[1.75rem] border border-white/10 bg-white/5 p-5" onSubmit={submitDeposit}>
-                    <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300">Deposit Funds</p>
-                    <p className="text-sm text-slate-400">Add any amount to your balance. Admin will verify your M-Pesa reference.</p>
-                    <Input label="Amount (Ksh)" type="number" value={depositForm.amount} onChange={(value) => setDepositForm((current) => ({ ...current, amount: value }))} />
-                    <Input label="M-Pesa reference" value={depositForm.mpesaRef} onChange={(value) => setDepositForm((current) => ({ ...current, mpesaRef: value }))} />
-                    <Input label="Phone number" value={depositForm.phone} onChange={(value) => setDepositForm((current) => ({ ...current, phone: value }))} />
-                    <div className="flex flex-wrap gap-3 pt-2">
-                      <ActionButton type="submit" disabled={submittingDeposit} className="!px-5 !py-3 !text-sm">
+                  <form className="space-y-5 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-6" onSubmit={submitDeposit}>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Deposit via M-Pesa</p>
+                      <p className="mt-2 text-sm text-slate-400">Send any amount to the QOOHI M-Pesa till, then submit the reference below. Admin will verify and credit your balance.</p>
+                    </div>
+                    <Input label="Amount (Ksh)" type="number" value={depositForm.amount} onChange={(v) => setDepositForm((c) => ({ ...c, amount: v }))} />
+                    <Input label="M-Pesa transaction code" value={depositForm.mpesaRef} onChange={(v) => setDepositForm((c) => ({ ...c, mpesaRef: v }))} />
+                    <Input label="Phone number used" value={depositForm.phone} onChange={(v) => setDepositForm((c) => ({ ...c, phone: v }))} />
+                    <div className="flex gap-3 pt-2">
+                      <ActionButton type="submit" disabled={submittingDeposit} className="!px-6 !py-3 !text-sm">
                         {submittingDeposit ? "Submitting..." : "Submit Deposit"}
                       </ActionButton>
-                      <SecondaryButton type="button" className="!px-5 !py-3 !text-sm" onClick={() => setProfileTab("view")}>
-                        Cancel
-                      </SecondaryButton>
+                      <SecondaryButton type="button" className="!px-6 !py-3 !text-sm" onClick={() => setProfileTab("view")}>Cancel</SecondaryButton>
                     </div>
                   </form>
                 )}
 
+                {/* Withdraw tab */}
                 {profileTab === "withdraw" && (
-                  <form className="space-y-4 rounded-[1.75rem] border border-white/10 bg-white/5 p-5" onSubmit={submitWithdraw}>
-                    <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300">Withdraw Funds</p>
-                    <p className="text-sm text-slate-400">Request a payout to your M-Pesa number and name.</p>
-                    <Input label="Amount (Ksh)" type="number" value={withdrawForm.amount} onChange={(value) => setWithdrawForm((current) => ({ ...current, amount: value }))} />
-                    <Input label="M-Pesa name" value={withdrawForm.mpesaName} onChange={(value) => setWithdrawForm((current) => ({ ...current, mpesaName: value }))} />
-                    <Input label="M-Pesa number" value={withdrawForm.mpesaNumber} onChange={(value) => setWithdrawForm((current) => ({ ...current, mpesaNumber: value }))} />
-                    <div className="flex flex-wrap gap-3 pt-2">
-                      <ActionButton type="submit" disabled={submittingWithdraw} className="!px-5 !py-3 !text-sm">
+                  <form className="space-y-5 rounded-2xl border border-rose-500/20 bg-rose-500/5 p-6" onSubmit={submitWithdraw}>
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-widest text-rose-400">Withdraw to M-Pesa</p>
+                      <p className="mt-2 text-sm text-slate-400">Request a payout. Admin will process and send to your M-Pesa number. Ensure your name and number match your M-Pesa account exactly.</p>
+                    </div>
+                    <Input label="Amount (Ksh)" type="number" value={withdrawForm.amount} onChange={(v) => setWithdrawForm((c) => ({ ...c, amount: v }))} />
+                    <Input label="M-Pesa registered name" value={withdrawForm.mpesaName} onChange={(v) => setWithdrawForm((c) => ({ ...c, mpesaName: v }))} />
+                    <Input label="M-Pesa phone number" value={withdrawForm.mpesaNumber} onChange={(v) => setWithdrawForm((c) => ({ ...c, mpesaNumber: v }))} />
+                    <div className="flex gap-3 pt-2">
+                      <ActionButton type="submit" disabled={submittingWithdraw} className="!px-6 !py-3 !text-sm">
                         {submittingWithdraw ? "Submitting..." : "Submit Withdrawal"}
                       </ActionButton>
-                      <SecondaryButton type="button" className="!px-5 !py-3 !text-sm" onClick={() => setProfileTab("view")}>
-                        Cancel
-                      </SecondaryButton>
+                      <SecondaryButton type="button" className="!px-6 !py-3 !text-sm" onClick={() => setProfileTab("view")}>Cancel</SecondaryButton>
                     </div>
                   </form>
                 )}
               </div>
             </div>
-          </GlassPanel>
+          </div>
         </div>
       )}
     </PageStack>
@@ -2439,8 +3083,6 @@ function Footer({ goTo }) {
   return (
     <footer className="fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-slate-950/80 py-4 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        
-        {/* Left: Copyright & Branding */}
         <div className="flex items-center gap-4">
           <button onClick={() => goTo("home")} className="flex items-center gap-2 group">
             <img src={QoohiLogo} alt="QOOHI Logo" className="h-8 w-8 rounded-lg border border-white/10 transition-transform group-hover:scale-110" />
@@ -2451,20 +3093,18 @@ function Footer({ goTo }) {
           </p>
         </div>
 
-        {/* Center: Quick Links (Desktop) */}
         <div className="hidden items-center gap-6 md:flex">
-          {["iep", "teachers", "resources", "learn", "games"].map((id) => (
+          {["teachers", "resources", "learn", "games"].map((id) => (
             <button
               key={id}
               onClick={() => goTo(id)}
               className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 transition hover:text-cyan-400"
             >
-              {id === "iep" ? "Learner IEP" : id}
+              {id === "resources" ? "materials" : id}
             </button>
           ))}
         </div>
 
-        {/* Right: Contact & Support */}
         <div className="flex items-center gap-5">
           <div className="flex gap-4">
             <a href="mailto:qoohitech@gmail.com" className="text-slate-400 hover:text-cyan-400 transition">
@@ -2485,6 +3125,7 @@ function Footer({ goTo }) {
     </footer>
   );
 }
+
 function StreamingText({ text, speed = 20 }) {
   const [displayedText, setDisplayedText] = useState("");
   useEffect(() => {
@@ -2584,13 +3225,11 @@ function QoohiAIPage({ sessionToken }) {
     }, 50);
   };
 
-  // ✏️ START EDIT
   const startEdit = (index, content) => {
     setEditingIndex(index);
     setEditText(content);
   };
 
-  // ❌ CANCEL EDIT
   const cancelEdit = () => {
     setEditingIndex(null);
     setEditText("");

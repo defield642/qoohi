@@ -2,17 +2,22 @@ import { useEffect, useState } from "react";
 import {
   FaChalkboardTeacher,
   FaCheck,
+  FaChevronRight,
+  FaCrown,
   FaEnvelope,
   FaGamepad,
   FaLaptopCode,
   FaMoneyBillWave,
+  FaPlus,
   FaRedo,
   FaRobot,
   FaSave,
   FaShieldAlt,
   FaSlidersH,
   FaTimes,
+  FaTrash,
   FaUserCircle,
+  FaUserShield,
   FaUsers,
   FaWallet,
 } from "react-icons/fa";
@@ -23,8 +28,7 @@ import bg4 from "./background/pexels-enginakyurt-1435752.jpg";
 import bg5 from "./background/pexels-pixabay-268533.jpg";
 import bg6 from "./background/pexels-pixabay-531880.jpg";
 
-const API_BASE =
-  import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? "" : "http://localhost:3000");
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 const DEFAULT_FINANCE_COLUMNS = [
   "mpesa",
@@ -39,7 +43,7 @@ const DEFAULT_FINANCE_COLUMNS = [
   "total",
 ];
 
-
+const ADMIN_ACCOUNT_LIMIT = 5;
 
 const groupIcons = {
   computer_packages: FaLaptopCode,
@@ -126,7 +130,7 @@ function buildServiceChargeDrafts(items = []) {
 }
 
 export default function AdminApp() {
-  const [adminKey, setAdminKey] = useState(localStorage.getItem("qoohi_admin_key") || "");
+  const [adminKey, setAdminKey] = useState("");
   const [overview, setOverview] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -164,6 +168,32 @@ export default function AdminApp() {
   const [depositNotes, setDepositNotes] = useState({});
   const [withdrawNotes, setWithdrawNotes] = useState({});
   const [adminStatus, setAdminStatus] = useState("");
+  const [adminSection, setAdminSection] = useState("overview");
+  const [adminAccounts, setAdminAccounts] = useState([]);
+  const [isSuperAdminUser, setIsSuperAdminUser] = useState(false);
+  const [adminCreateForm, setAdminCreateForm] = useState({ name: "", email: "" });
+  const [adminCreateResult, setAdminCreateResult] = useState(null);
+  const [adminCreateError, setAdminCreateError] = useState("");
+  const [creatingAdmin, setCreatingAdmin] = useState(false);
+  const [removingAdminId, setRemovingAdminId] = useState(null);
+  const [adminAuthMode, setAdminAuthMode] = useState("register");
+  const [adminAuthStage, setAdminAuthStage] = useState("form");
+  const [adminAuthForm, setAdminAuthForm] = useState({ fullName: "", email: "", code: "" });
+  const [adminAuthStatus, setAdminAuthStatus] = useState("");
+  const [adminAuthError, setAdminAuthError] = useState("");
+  const [sendingAdminCode, setSendingAdminCode] = useState(false);
+  const [verifyingAdminCode, setVerifyingAdminCode] = useState(false);
+
+  const adminNav = [
+    { id: "overview", Icon: FaShieldAlt, label: "Overview" },
+    { id: "balances", Icon: FaWallet, label: "Balances" },
+    { id: "services", Icon: FaSlidersH, label: "Services" },
+    { id: "deposits", Icon: FaCheck, label: "Deposits" },
+    { id: "withdrawals", Icon: FaMoneyBillWave, label: "Withdrawals" },
+    { id: "groups", Icon: FaUsers, label: "Groups" },
+    { id: "finance", Icon: FaSave, label: "Finance" },
+    { id: "admins", Icon: FaUserShield, label: "Admins" },
+  ];
   const backgroundImages = [bg1, bg2, bg3, bg4, bg5, bg6];
   const [bgIndex, setBgIndex] = useState(0);
 
@@ -199,6 +229,7 @@ export default function AdminApp() {
     setServiceDrafts(buildServiceChargeDrafts(serviceCharges));
   }, [serviceCharges]);
 
+
   const loadCollections = async (key = adminKey) => {
     const [usersData, depositsData, withdrawalsData] = await Promise.all([
       fetchJson("/api/admin/users/all", key),
@@ -210,21 +241,31 @@ export default function AdminApp() {
     setWithdrawals(withdrawalsData.withdrawals || []);
   };
 
-  const loadOverview = async () => {
+  const loadAdminAccounts = async (key = adminKey) => {
+    const acctData = await fetchJson("/api/admin/accounts", key);
+    setAdminAccounts(acctData.accounts || []);
+    setIsSuperAdminUser(acctData.isSuperAdmin || false);
+    return acctData;
+  };
+
+  const loadOverview = async (key = adminKey) => {
     setLoading(true);
     setError("");
     setAdminStatus("");
     try {
-      const data = await fetchJson("/api/admin/overview", adminKey);
+      const data = await fetchJson("/api/admin/overview", key);
       setOverview(data);
       setServiceCharges(Array.isArray(data.serviceCharges) ? data.serviceCharges : []);
       setAdminVerified(true);
-      if (!selectedGroup && data.groups.length > 0) {
-        setSelectedGroup(data.groups[0]);
+      if (!selectedGroup) {
+        const firstVisibleGroup = (data.groups || []).find((group) => group.key !== "tournament");
+        if (firstVisibleGroup) {
+          setSelectedGroup(firstVisibleGroup);
+        }
       }
-      localStorage.setItem("qoohi_admin_key", adminKey);
       try {
-        await loadCollections(adminKey);
+        await loadCollections(key);
+        await loadAdminAccounts(key);
       } catch (collectionErr) {
         setError(collectionErr.message);
       }
@@ -237,8 +278,125 @@ export default function AdminApp() {
     }
   };
 
-  const activeGroup =
-    overview?.groups.find((group) => group.key === selectedGroup?.key) || null;
+  const createAdminAccount = async (event) => {
+    event.preventDefault();
+    setAdminCreateError("");
+    setAdminCreateResult(null);
+    setCreatingAdmin(true);
+    try {
+      const data = await fetchJson(
+        "/api/admin/create-account",
+        adminKey,
+        "POST",
+        JSON.stringify(adminCreateForm),
+      );
+      setAdminCreateResult({
+        name: adminCreateForm.name.trim(),
+        email: adminCreateForm.email.trim().toLowerCase(),
+        accessKey: data.accessKey,
+        message: data.message,
+      });
+      setAdminCreateForm({ name: "", email: "" });
+      await loadAdminAccounts(adminKey);
+      await loadOverview();
+    } catch (err) {
+      setAdminCreateError(err.message);
+    } finally {
+      setCreatingAdmin(false);
+    }
+  };
+
+  const removeAdminAccount = async (account) => {
+    if (!window.confirm(`Remove admin account for ${account.name || account.email}?`)) {
+      return;
+    }
+
+    setRemovingAdminId(account.id);
+    setAdminCreateError("");
+    try {
+      await fetchJson(
+        "/api/admin/remove-account",
+        adminKey,
+        "POST",
+        JSON.stringify({ id: account.id }),
+      );
+      await loadAdminAccounts(adminKey);
+      await loadOverview();
+      setAdminCreateResult({
+        name: account.name,
+        email: account.email,
+        accessKey: "",
+        message: `${account.name || account.email} was removed from admin access.`,
+      });
+    } catch (err) {
+      setAdminCreateError(err.message);
+    } finally {
+      setRemovingAdminId(null);
+    }
+  };
+
+  const requestAdminCode = async (event) => {
+    event.preventDefault();
+    setAdminAuthError("");
+    setAdminAuthStatus("");
+    setSendingAdminCode(true);
+    try {
+      const payload = {
+        mode: adminAuthMode,
+        email: adminAuthForm.email,
+        fullName: adminAuthForm.fullName,
+      };
+      await fetchJson(
+        "/api/admin/auth/send-code",
+        "",
+        "POST",
+        JSON.stringify(payload),
+      );
+      setAdminAuthStage("verify");
+      setAdminAuthStatus(`We sent a 32-character code to ${adminAuthForm.email}.`);
+    } catch (err) {
+      setAdminAuthError(err.message);
+    } finally {
+      setSendingAdminCode(false);
+    }
+  };
+
+  const verifyAdminCode = async (event) => {
+    event.preventDefault();
+    setAdminAuthError("");
+    setAdminAuthStatus("");
+    setVerifyingAdminCode(true);
+    try {
+      const data = await fetchJson(
+        "/api/admin/auth/verify-code",
+        "",
+        "POST",
+        JSON.stringify({
+          mode: adminAuthMode,
+          email: adminAuthForm.email,
+          fullName: adminAuthForm.fullName,
+          code: adminAuthForm.code,
+        }),
+      );
+      setAdminKey(data.accessKey);
+      setAdminVerified(true);
+      setAdminSection("overview");
+      setAdminAuthStage("form");
+      setAdminAuthForm({ fullName: "", email: "", code: "" });
+      setAdminAuthStatus("");
+      await loadOverview(data.accessKey);
+    } catch (err) {
+      setAdminAuthError(err.message);
+    } finally {
+      setVerifyingAdminCode(false);
+    }
+  };
+
+  const visibleGroups = (overview?.groups || []).filter((group) => group.key !== "tournament");
+  const activeGroup = visibleGroups.find((group) => group.key === selectedGroup?.key) || null;
+  const isDashboardReady = adminVerified && overview;
+  const activeAdminCount = adminAccounts.filter((item) => Number(item.active || 0) === 1).length;
+  const remainingAdminSlots = Math.max(ADMIN_ACCOUNT_LIMIT - activeAdminCount, 0);
 
   const sendMessage = async (targetType, targetId) => {
     setError("");
@@ -459,50 +617,221 @@ export default function AdminApp() {
       ))}
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <header className="mb-8">
-          <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">
-            Secure Admin
-          </p>
-          <h1 className="mt-3 text-4xl font-black text-white">QOOHI Admin</h1>
-          <p className="mt-3 max-w-2xl text-sm text-slate-300">
-            Manage balances, service pricing, deposits, withdrawals, and group updates from one workspace.
-          </p>
-        </header>
-
-        <section className="mb-8 rounded-[2rem] border border-white/10 bg-white/10 p-8 backdrop-blur-xl">
-          <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
-            <Field label="Admin access key">
-              <input
-                type="password"
-                value={adminKey}
-                onChange={(event) => setAdminKey(event.target.value)}
-                className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
-              />
-            </Field>
-            <button
-              onClick={loadOverview}
-              className="inline-flex h-[52px] items-center justify-center rounded-full bg-cyan-300 px-6 text-sm font-black text-slate-950 transition hover:bg-cyan-200"
-            >
-              {loading ? "Verifying..." : "Open admin"}
-            </button>
-          </div>
-          {adminVerified && !error && (
-            <div className="mt-4 rounded-[1.25rem] border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
-              Admin key verified.
+        {!isDashboardReady && (
+          <section className="mx-auto mb-8 max-w-3xl rounded-[2.25rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl sm:p-8">
+            <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Admin access</p>
+                <h1 className="mt-2 text-4xl font-black text-white">QOOHI Admin Register</h1>
+                <p className="mt-3 max-w-2xl text-sm text-slate-300">
+                  Register or log in with your full name and email. We will send a 32-character code to your inbox, then unlock the dashboard after verification.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge>{activeAdminCount}/{ADMIN_ACCOUNT_LIMIT} admins</Badge>
+                <Badge>{adminAuthMode === "register" ? "Register" : "Login"}</Badge>
+              </div>
             </div>
-          )}
-          {error && <Notice>{error}</Notice>}
-        </section>
+
+            <div className="mb-4 flex gap-2 rounded-full border border-white/10 bg-slate-950/50 p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminAuthMode("register");
+                  setAdminAuthStage("form");
+                  setAdminAuthStatus("");
+                  setAdminAuthError("");
+                }}
+                className={`flex-1 rounded-full px-4 py-2 text-sm font-black transition ${
+                  adminAuthMode === "register" ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:text-white"
+                }`}
+              >
+                Register
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminAuthMode("login");
+                  setAdminAuthStage("form");
+                  setAdminAuthStatus("");
+                  setAdminAuthError("");
+                }}
+                className={`flex-1 rounded-full px-4 py-2 text-sm font-black transition ${
+                  adminAuthMode === "login" ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:text-white"
+                }`}
+              >
+                Login
+              </button>
+            </div>
+
+            {adminAuthStage === "form" ? (
+              <form className="space-y-4" onSubmit={requestAdminCode}>
+                {adminAuthMode === "register" && (
+                  <Field label="Full name">
+                    <input
+                      value={adminAuthForm.fullName}
+                      onChange={(event) => setAdminAuthForm((current) => ({ ...current, fullName: event.target.value }))}
+                      placeholder="Your full name"
+                      className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+                    />
+                  </Field>
+                )}
+                <Field label="Email address">
+                  <input
+                    type="email"
+                    value={adminAuthForm.email}
+                    onChange={(event) => setAdminAuthForm((current) => ({ ...current, email: event.target.value }))}
+                    placeholder="admin@example.com"
+                    className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+                  />
+                </Field>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="submit"
+                    disabled={sendingAdminCode}
+                    className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <FaEnvelope /> {sendingAdminCode ? "Sending..." : "Send code"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdminAuthMode((current) => (current === "register" ? "login" : "register"))}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                  >
+                    {adminAuthMode === "register" ? "Have a login?" : "Need to register?"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form className="space-y-4" onSubmit={verifyAdminCode}>
+                <Field label="Email address">
+                  <input
+                    type="email"
+                    value={adminAuthForm.email}
+                    onChange={(event) => setAdminAuthForm((current) => ({ ...current, email: event.target.value }))}
+                    placeholder="admin@example.com"
+                    className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+                  />
+                </Field>
+                <Field label="Verification code">
+                  <input
+                    value={adminAuthForm.code}
+                    onChange={(event) => setAdminAuthForm((current) => ({ ...current, code: event.target.value }))}
+                    placeholder="Paste the 32-character code"
+                    className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 font-mono tracking-[0.2em] text-white outline-none focus:border-cyan-300/60"
+                  />
+                </Field>
+                {adminAuthMode === "register" && (
+                  <Field label="Full name">
+                    <input
+                      value={adminAuthForm.fullName}
+                      onChange={(event) => setAdminAuthForm((current) => ({ ...current, fullName: event.target.value }))}
+                      placeholder="Your full name"
+                      className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+                    />
+                  </Field>
+                )}
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="submit"
+                    disabled={verifyingAdminCode}
+                    className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <FaCheck /> {verifyingAdminCode ? "Verifying..." : "Verify code"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdminAuthStage("form");
+                      setAdminAuthForm((current) => ({ ...current, code: "" }));
+                      setAdminAuthStatus("");
+                      setAdminAuthError("");
+                    }}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                  >
+                    Edit details
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {adminAuthStatus && (
+              <div className="mt-4 rounded-[1.25rem] border border-emerald-300/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
+                {adminAuthStatus}
+              </div>
+            )}
+            {adminAuthError && <Notice>{adminAuthError}</Notice>}
+          </section>
+        )}
 
         {overview && adminVerified && (
-          <div className="space-y-8">
+          <div>
             {adminStatus && (
-              <div className="rounded-[1.5rem] border border-emerald-300/20 bg-emerald-400/10 px-5 py-4 text-sm font-semibold text-emerald-100">
+              <div className="mb-6 rounded-[1.5rem] border border-emerald-300/20 bg-emerald-400/10 px-5 py-4 text-sm font-semibold text-emerald-100">
                 {adminStatus}
               </div>
             )}
 
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            {/* ── Admin Sidebar Layout ── */}
+            <div className="flex flex-col gap-4 md:flex-row md:gap-6">
+
+              {/* Admin Left Sidebar */}
+              <aside className="hidden md:flex flex-col w-52 flex-shrink-0">
+                <div className="sticky top-24 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/90 backdrop-blur-xl">
+                  <div className="border-b border-white/10 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-cyan-500/20">
+                        <FaShieldAlt className="text-cyan-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-white">QOOHI Admin</p>
+                        <p className="truncate text-[10px] text-slate-500">Management Console</p>
+                      </div>
+                    </div>
+                  </div>
+                  <nav className="space-y-0.5 p-2">
+                    {adminNav.map(({ id, Icon, label }) => (
+                      <button key={id} type="button" onClick={() => setAdminSection(id)}
+                        className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${
+                          adminSection === id
+                            ? "bg-cyan-500/20 font-bold text-cyan-300"
+                            : "font-medium text-slate-400 hover:bg-white/5 hover:text-white"
+                        }`}
+                      >
+                        <Icon className={`flex-shrink-0 text-[15px] ${adminSection === id ? "text-cyan-400" : "text-slate-600"}`} />
+                        {label}
+                      </button>
+                    ))}
+                  </nav>
+                  <div className="border-t border-white/10 p-3">
+                    <button type="button" onClick={loadOverview}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 transition hover:bg-white/5 hover:text-white"
+                    >
+                      <FaRedo className="text-xs" /> Refresh Data
+                    </button>
+                  </div>
+                </div>
+              </aside>
+
+              {/* Admin Mobile Scroll Nav */}
+              <div className="flex md:hidden gap-2 overflow-x-auto pb-2">
+                {adminNav.map(({ id, Icon, label }) => (
+                  <button key={id} type="button" onClick={() => setAdminSection(id)}
+                    className={`flex flex-shrink-0 items-center gap-2 rounded-full px-3 py-2 text-[11px] font-bold transition ${
+                      adminSection === id ? "bg-cyan-500 text-slate-950" : "border border-white/10 bg-white/5 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <Icon className="text-xs" />{label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Admin Section Content */}
+              <div className="min-w-0 flex-1 space-y-6">
+
+                {/* OVERVIEW */}
+                {adminSection === "overview" && (
+                  <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
               {[
                 { label: "Users", value: users.length.toLocaleString(), note: "Total accounts" },
                 { label: "Balance", value: `Ksh ${totalBalance.toLocaleString()}`, note: "Combined user balance" },
@@ -516,13 +845,16 @@ export default function AdminApp() {
                   <p className="mt-2 text-sm text-slate-300">{stat.note}</p>
                 </div>
               ))}
-            </section>
+                </section>
+                )}
 
-            <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-              <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Balances</p>
+                {/* BALANCES section */}
+                {adminSection === "balances" && (
+                <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+                  <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Balances</p>
                     <h2 className="mt-2 text-2xl font-black text-white">All user accounts</h2>
                   </div>
                   <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold uppercase tracking-[0.22em] text-slate-300">
@@ -662,7 +994,10 @@ export default function AdminApp() {
                 </div>
               </div>
             </section>
+                )}
 
+                {/* SERVICES section */}
+                {adminSection === "services" && (
             <section className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div>
@@ -779,7 +1114,10 @@ export default function AdminApp() {
                 })}
               </div>
             </section>
+                )}
 
+                {/* DEPOSITS + WITHDRAWALS section */}
+                {(adminSection === "deposits" || adminSection === "withdrawals") && (
             <section className="grid gap-6 xl:grid-cols-2">
               <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
                 <div className="flex items-center justify-between gap-4">
@@ -899,15 +1237,19 @@ export default function AdminApp() {
                 </div>
               </div>
             </section>
+                )}
 
+                                {/* GROUPS section */}
+                {adminSection === "groups" && (
             <section className="space-y-4">
               <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Groups</p>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {overview.groups.map((group) => {
+                {visibleGroups.map((group) => {
                   const Icon = groupIcons[group.key] || FaUsers;
                   return (
                     <button
                       key={group.key}
+                      type="button"
                       onClick={() => {
                         setSelectedGroup(group);
                         setSelectedMember(null);
@@ -928,8 +1270,203 @@ export default function AdminApp() {
                   );
                 })}
               </div>
-            </section>
 
+              {activeGroup && (
+                <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+                  <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
+                    <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Group details</p>
+                    <h2 className="mt-2 text-2xl font-black text-white">{activeGroup.name}</h2>
+                    <p className="mt-2 text-sm text-slate-300">{activeGroup.count} member{activeGroup.count === 1 ? "" : "s"}</p>
+                    <div className="mt-6 grid gap-3">
+                      {activeGroup.members.map((member) => {
+                        const whatsappDigits = String(member.whatsapp || "").replace(/\D/g, "");
+                        const whatsappLink = whatsappDigits
+                          ? `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(`Hello ${member.full_name || "there"}, QOOHI admin is reaching out.`)}`
+                          : null;
+                        return (
+                          <div key={member.id} className="rounded-[1.4rem] border border-white/10 bg-slate-950/45 p-4">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <p className="text-base font-black text-white">{member.full_name}</p>
+                                <p className="mt-1 text-sm text-slate-300">{member.email}</p>
+                                <p className="mt-1 text-sm text-slate-300">{member.whatsapp || "No WhatsApp number"}</p>
+                              </div>
+                              {whatsappLink && (
+                                <a
+                                  href={whatsappLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center justify-center rounded-full bg-emerald-400 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-emerald-300"
+                                >
+                                  Text on WhatsApp
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {activeGroup.members.length === 0 && (
+                        <p className="rounded-[1.4rem] border border-white/10 bg-slate-950/40 px-4 py-5 text-slate-300">No members in this category yet.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </section>
+                )}
+
+                {/* ADMINS section */}
+                {adminSection === "admins" && (
+            <section className="space-y-6">
+              <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Admin members</p>
+                  <h2 className="mt-2 text-2xl font-black text-white">Register up to five admins</h2>
+                  <p className="mt-2 max-w-2xl text-sm text-slate-300">
+                    Use the superadmin account to create or remove admin members. New access keys are shown once after creation.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge>{activeAdminCount} active</Badge>
+                  <Badge>{remainingAdminSlots} slots left</Badge>
+                </div>
+              </div>
+
+              {adminCreateResult && (
+                <div className="rounded-[1.75rem] border border-emerald-300/20 bg-emerald-400/10 p-5 text-sm text-emerald-100">
+                  <p className="font-black uppercase tracking-[0.28em] text-emerald-200">Result</p>
+                  <p className="mt-2 font-semibold">{adminCreateResult.message}</p>
+                  {adminCreateResult.accessKey && (
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Access key</p>
+                      <p className="mt-2 break-all font-mono text-sm text-white">{adminCreateResult.accessKey}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {adminCreateError && <Notice>{adminCreateError}</Notice>}
+
+              <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+                <form className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl" onSubmit={createAdminAccount}>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Register admin</p>
+                    <h3 className="mt-2 text-2xl font-black text-white">Create a new member</h3>
+                  </div>
+
+                  <div className="mt-6 space-y-4">
+                    <Field label="Full name">
+                      <input
+                        value={adminCreateForm.name}
+                        onChange={(event) => setAdminCreateForm((current) => ({ ...current, name: event.target.value }))}
+                        className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+                        placeholder="Admin name"
+                      />
+                    </Field>
+                    <Field label="Email address">
+                      <input
+                        type="email"
+                        value={adminCreateForm.email}
+                        onChange={(event) => setAdminCreateForm((current) => ({ ...current, email: event.target.value }))}
+                        className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+                        placeholder="admin@example.com"
+                      />
+                    </Field>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={creatingAdmin || remainingAdminSlots === 0}
+                    className="mt-6 inline-flex items-center gap-2 rounded-full bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <FaPlus /> {creatingAdmin ? "Creating..." : remainingAdminSlots === 0 ? "Admin limit reached" : "Create admin"}
+                  </button>
+                </form>
+
+                <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Member roster</p>
+                      <h3 className="mt-2 text-2xl font-black text-white">Active accounts</h3>
+                    </div>
+                    <p className="text-sm text-slate-300">
+                      Superadmin: filemarshal757@gmail.com
+                    </p>
+                  </div>
+
+                  <div className="mt-6 grid gap-3">
+                    {adminAccounts.map((account) => {
+                      const isActive = Number(account.active || 0) === 1;
+                      const removable = isSuperAdminUser && !account.is_superadmin && isActive;
+                      return (
+                        <div
+                          key={account.id}
+                          className={`rounded-[1.5rem] border p-4 ${
+                            isActive
+                              ? "border-white/10 bg-slate-950/45"
+                              : "border-rose-300/20 bg-rose-400/10"
+                          }`}
+                        >
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-lg font-black text-white">{account.name || account.email}</p>
+                                {account.is_superadmin ? (
+                                  <span className="rounded-full bg-amber-400/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-amber-200">
+                                    Superadmin
+                                  </span>
+                                ) : (
+                                  <span className="rounded-full bg-cyan-400/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200">
+                                    Admin
+                                  </span>
+                                )}
+                                <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.24em] ${
+                                  isActive
+                                    ? "bg-emerald-400/15 text-emerald-200"
+                                    : "bg-rose-400/15 text-rose-200"
+                                }`}>
+                                  {isActive ? "Active" : "Inactive"}
+                                </span>
+                              </div>
+                              <p className="mt-2 text-sm text-slate-300">{account.email}</p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                Created {account.created_at ? new Date(account.created_at).toLocaleString("en-US") : "recently"}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {removable && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeAdminAccount(account)}
+                                  disabled={removingAdminId === account.id}
+                                  className="inline-flex items-center gap-2 rounded-full border border-rose-300/30 bg-rose-300/10 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-rose-100 transition hover:bg-rose-300/20 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  <FaTrash /> {removingAdminId === account.id ? "Removing..." : "Remove"}
+                                </button>
+                              )}
+                              {!account.is_superadmin && !isActive && (
+                                <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-400">
+                                  Removed
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {adminAccounts.length === 0 && (
+                      <div className="rounded-[1.5rem] border border-dashed border-white/10 p-8 text-center text-slate-400">
+                        No admin accounts loaded yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+                )}
+
+                {/* FINANCE section */}
+                {adminSection === "finance" && (
             <section className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
@@ -1002,7 +1539,10 @@ export default function AdminApp() {
                 />
               </div>
             </section>
+                )}
 
+                {/* MESSAGES + TOURNAMENT section */}
+                {false && (
             <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
               <div className="space-y-6">
                 <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
@@ -1178,6 +1718,10 @@ export default function AdminApp() {
                 </div>
               </div>
             </section>
+                )}
+
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -1257,6 +1801,14 @@ function Notice({ children }) {
     <div className="mt-4 rounded-[1.25rem] border border-rose-300/25 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
       {children}
     </div>
+  );
+}
+
+function Badge({ children }) {
+  return (
+    <span className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.24em] text-white/85">
+      {children}
+    </span>
   );
 }
 

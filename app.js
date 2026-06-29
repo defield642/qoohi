@@ -93,7 +93,8 @@ const DEFAULT_SERVICE_CHARGES = [
   { serviceKey: "iep_assessment", label: "IEP Assessment", description: "Individualized education assessment and support", chargeKsh: 0, active: 1, sortOrder: 8 },
   { serviceKey: "teacher_registration", label: "Teacher Registration", description: "Teacher onboarding and account setup", chargeKsh: 0, active: 1, sortOrder: 9 },
   { serviceKey: "parent_registration", label: "Parent Registration", description: "Parent onboarding and account setup", chargeKsh: 0, active: 1, sortOrder: 10 },
-  { serviceKey: "profile_update", label: "Profile Update", description: "Profile photo and details editing", chargeKsh: 0, active: 1, sortOrder: 11 },
+  { serviceKey: "materials_download", label: "Materials Download", description: "AI-generated Kenyan curriculum materials", chargeKsh: 10, active: 1, sortOrder: 11 },
+  { serviceKey: "profile_update", label: "Profile Update", description: "Profile photo and details editing", chargeKsh: 0, active: 1, sortOrder: 12 },
 ];
 
 const DEFAULT_FINANCE_COLUMNS = [
@@ -130,6 +131,39 @@ for (const service of DEFAULT_SERVICE_CHARGES) {
   );
 }
 
+// Admin accounts table migration
+try { db.exec("ALTER TABLE admin_accounts ADD COLUMN name TEXT NOT NULL DEFAULT ''"); } catch { /* ok */ }
+try { db.exec("ALTER TABLE users ADD COLUMN specializations TEXT NOT NULL DEFAULT ''"); } catch { /* ok */ }
+try { db.exec("ALTER TABLE parent_students ADD COLUMN goals TEXT NOT NULL DEFAULT ''"); } catch { /* table/column may not exist yet */ }
+try { db.exec("ALTER TABLE parent_students ADD COLUMN grade_level TEXT NOT NULL DEFAULT ''"); } catch { /* table/column may not exist yet */ }
+
+// Generate a 32-char admin key with mixed chars
+function generateAdminKey() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&*+-=?';
+  let key = '';
+  for (let i = 0; i < 32; i += 1) key += chars[Math.floor(Math.random() * chars.length)];
+  return key;
+}
+
+function generateAdminCode() {
+  return generateAdminKey();
+}
+
+// Seed default superadmin
+const DEFAULT_SUPERADMIN_EMAIL = 'filemarshal757@gmail.com';
+const existingSuperAdmin = db.prepare("SELECT id, access_key FROM admin_accounts WHERE email = ?").get(DEFAULT_SUPERADMIN_EMAIL);
+if (!existingSuperAdmin) {
+  const superKey = generateAdminKey();
+  db.prepare("INSERT INTO admin_accounts (name, email, access_key, is_superadmin, active) VALUES (?, ?, ?, 1, 1)")
+    .run('Super Admin', DEFAULT_SUPERADMIN_EMAIL, superKey);
+  console.log(`\n========== DEFAULT SUPERADMIN CREATED ==========`);
+  console.log(`Email: ${DEFAULT_SUPERADMIN_EMAIL}`);
+  console.log(`Access Key: ${superKey}`);
+  console.log(`================================================\n`);
+} else {
+  console.log(`[Admin] Superadmin key exists for ${DEFAULT_SUPERADMIN_EMAIL} (id=${existingSuperAdmin.id})`);
+}
+
 // Ensure each existing user has a referral code
 const usersWithoutRef = db.prepare("SELECT id FROM users WHERE referral_code IS NULL").all();
 const updateRef = db.prepare("UPDATE users SET referral_code = ? WHERE id = ?");
@@ -137,6 +171,18 @@ for (const u of usersWithoutRef) {
   const code = 'QH' + Math.random().toString(36).substring(2, 8).toUpperCase();
   updateRef.run(code, u.id);
 }
+
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS parent_students (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_user_id INTEGER NOT NULL,
+    child_name TEXT NOT NULL,
+    grade_level TEXT NOT NULL,
+    goals TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (parent_user_id) REFERENCES users(id)
+  )`);
+} catch { /* ok */ }
 
 // Middleware to inject environment (Render/Node specific)
 app.use('*', async (c, next) => {
@@ -294,6 +340,16 @@ app.post("/api/auth/send-code", async (c) => {
       return c.json({ error: "Choose a valid learning package." }, 400);
     }
 
+    if (registrationType === "teacher" && !String(body.specialization || "").trim()) {
+      return c.json({ error: "Teacher specialization is required." }, 400);
+    }
+
+    if (registrationType === "parent") {
+      if (!String(body.childName || "").trim() || !String(body.childGradeLevel || "").trim() || !String(body.childGoals || "").trim()) {
+        return c.json({ error: "Child name, grade level, and goals are required." }, 400);
+      }
+    }
+
     if (registrationType === "tournament") {
       const regOpenRow = await c.env.DB.prepare(
         "SELECT value FROM tournament_settings WHERE key = 'registration_open'"
@@ -332,6 +388,10 @@ app.post("/api/auth/send-code", async (c) => {
     selectedPackage: body.selectedPackage || "",
     fullName,
     whatsapp,
+    specialization: String(body.specialization || "").trim(),
+    childName: String(body.childName || "").trim(),
+    childGradeLevel: String(body.childGradeLevel || "").trim(),
+    childGoals: String(body.childGoals || "").trim(),
   });
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
@@ -419,9 +479,15 @@ app.post("/api/auth/verify-code", async (c) => {
 
     if (!user) {
       const inserted = await c.env.DB.prepare(
-        "INSERT INTO users (full_name, whatsapp, email, role) VALUES (?, ?, ?, ?)",
+        "INSERT INTO users (full_name, whatsapp, email, role, specializations) VALUES (?, ?, ?, ?, ?)",
       )
-        .bind(metadata.fullName, metadata.whatsapp, email, requestedRole)
+        .bind(
+          metadata.fullName,
+          metadata.whatsapp,
+          email,
+          requestedRole,
+          requestedRole === "teacher" ? metadata.specialization : "",
+        )
         .run();
       const refCode = 'QH' + Math.random().toString(36).substring(2, 8).toUpperCase();
       await c.env.DB.prepare("UPDATE users SET referral_code = ? WHERE id = ?")
@@ -432,9 +498,15 @@ app.post("/api/auth/verify-code", async (c) => {
     } else {
       const finalRole = (user.role !== "student" && requestedRole === "student") ? user.role : requestedRole;
       await c.env.DB.prepare(
-        "UPDATE users SET full_name = ?, whatsapp = ?, role = ? WHERE id = ?",
+        "UPDATE users SET full_name = ?, whatsapp = ?, role = ?, specializations = ? WHERE id = ?",
       )
-        .bind(metadata.fullName, metadata.whatsapp, finalRole, user.id)
+        .bind(
+          metadata.fullName,
+          metadata.whatsapp,
+          finalRole,
+          finalRole === "teacher" ? metadata.specialization : (user.specializations || ""),
+          user.id,
+        )
         .run();
       user = await c.env.DB.prepare("SELECT * FROM users WHERE id = ?")
         .bind(user.id)
@@ -451,6 +523,15 @@ app.post("/api/auth/verify-code", async (c) => {
          VALUES (?, ?, ?, ?)`,
       )
         .bind(user.id, pkg.key, pkg.name, pkg.priceKsh)
+        .run();
+    }
+
+    if (metadata.registrationType === "parent") {
+      await c.env.DB.prepare(
+        `INSERT INTO parent_students (parent_user_id, child_name, grade_level, goals)
+         VALUES (?, ?, ?, ?)`,
+      )
+        .bind(user.id, metadata.childName || "", metadata.childGradeLevel || "", metadata.childGoals || "")
         .run();
     }
 
@@ -505,11 +586,86 @@ app.get("/api/teacher/overview", async (c) => {
     return c.json({ error: "Unauthorized." }, 401);
   }
 
-  const groupedStudents = await buildAdminGroups(c.env);
+  const childrenRows = await c.env.DB.prepare(
+    `SELECT parent_students.id, parent_students.child_name, parent_students.grade_level,
+            parent_students.goals, parent_students.created_at,
+            users.full_name as parent_name, users.email as parent_email, users.whatsapp as parent_whatsapp
+     FROM parent_students
+     JOIN users ON users.id = parent_students.parent_user_id
+     ORDER BY parent_students.grade_level ASC, parent_students.child_name ASC`,
+  ).all();
+
+  const teacherRows = await c.env.DB.prepare(
+    `SELECT id, full_name, email, whatsapp, specializations
+     FROM users
+     WHERE role = 'teacher' AND (specializations IS NOT NULL)
+     ORDER BY full_name ASC`,
+  ).all();
+
   return c.json({
     ok: true,
-    groups: groupedStudents,
+    children: childrenRows.results || [],
+    teachers: teacherRows.results || [],
+    currentTeacher: session.user,
   });
+});
+
+app.post("/api/teacher/specializations", async (c) => {
+  const session = await requireSession(c);
+  if (!session.ok || session.user.role !== "teacher") {
+    return c.json({ error: "Unauthorized." }, 401);
+  }
+  const body = await c.req.json();
+  const specializations = String(body.specializations || "").trim();
+  await c.env.DB.prepare("UPDATE users SET specializations = ? WHERE id = ?")
+    .bind(specializations, session.user.id)
+    .run();
+  return c.json({ ok: true, specializations });
+});
+
+app.post("/api/parent/children", async (c) => {
+  const session = await requireSession(c);
+  if (!session.ok || session.user.role !== "parent") {
+    return c.json({ error: "Unauthorized." }, 401);
+  }
+  const body = await c.req.json();
+  const childName = String(body.childName || "").trim();
+  const gradeLevel = String(body.gradeLevel || "").trim();
+  const goals = String(body.goals || "").trim();
+  if (!childName || !gradeLevel || !goals) {
+    return c.json({ error: "Child name, grade level, and goals are required." }, 400);
+  }
+  await c.env.DB.prepare(
+    `INSERT INTO parent_students (parent_user_id, child_name, grade_level, goals)
+     VALUES (?, ?, ?, ?)`
+  ).bind(session.user.id, childName, gradeLevel, goals).run();
+  const children = await c.env.DB.prepare(
+    `SELECT id, child_name, grade_level, goals, created_at
+     FROM parent_students
+     WHERE parent_user_id = ?
+     ORDER BY created_at DESC`
+  ).bind(session.user.id).all();
+  return c.json({ ok: true, children: children.results || [] });
+});
+
+app.post("/api/ai/materials", async (c) => {
+  const body = await c.req.json();
+  const grade = String(body.grade || "").trim();
+  const topic = String(body.topic || "").trim();
+  if (!grade || !topic) return c.json({ error: "Grade and topic are required." }, 400);
+  const prompt = [
+    `Create concise Kenyan curriculum learning materials for Grade ${grade}.`,
+    `Topic: ${topic}.`,
+    "Provide a title, summary, learning objectives, activities, and a short revision section.",
+    "Use simple language for a parent to download and print.",
+    "Return plain text only."
+  ].join(" ");
+  const result = await getChatReply(c.env, [{ role: "user", content: prompt }], {
+    systemPrompt: "You create Kenyan CBC learning materials for parents and children.",
+    temperature: 0.6,
+  });
+  if (!result.ok) return c.json({ error: result.error }, 500);
+  return c.json({ ok: true, title: `Grade ${grade} - ${topic}`, content: result.reply });
 });
 
 app.get("/api/admin/overview", async (c) => {
@@ -524,6 +680,145 @@ app.get("/api/admin/overview", async (c) => {
     serviceCharges,
   });
 });
+
+app.get("/api/public/teachers", async (c) => {
+  const teachers = await c.env.DB.prepare(
+    `SELECT id, full_name, email, whatsapp, specializations
+     FROM users
+     WHERE role = 'teacher'
+     ORDER BY full_name ASC`,
+  ).all();
+  return c.json({ ok: true, teachers: teachers.results || [] });
+});
+app.post("/api/admin/auth/send-code", async (c) => {
+  const body = await c.req.json();
+  const mode = body.mode === "login" ? "login" : "register";
+  const email = normalizeEmail(body.email);
+  const fullName = String(body.fullName || "").trim();
+
+  if (!email) {
+    return c.json({ error: "Email is required." }, 400);
+  }
+
+  const existing = db.prepare("SELECT * FROM admin_accounts WHERE LOWER(email) = LOWER(?)").get(email);
+
+  if (mode === "register") {
+    if (!fullName) {
+      return c.json({ error: "Full name is required." }, 400);
+    }
+    if (!existing && Number(db.prepare("SELECT COUNT(*) as total FROM admin_accounts WHERE active = 1").get()?.total || 0) >= 5) {
+      return c.json({ error: "Maximum of 5 admin accounts allowed." }, 400);
+    }
+  } else if (!existing || Number(existing.active || 0) !== 1) {
+    return c.json({ error: "No active admin account found for that email." }, 404);
+  }
+
+  const code = generateAdminCode();
+  const metadata = JSON.stringify({ mode, fullName });
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+  await c.env.DB.prepare(
+    `INSERT INTO auth_codes (email, code, purpose, metadata_json, expires_at)
+     VALUES (?, ?, ?, ?, ?)`,
+  )
+    .bind(email, code, 'admin', metadata, expiresAt)
+    .run();
+
+  await sendMail(c.env, {
+    to: email,
+    subject: mode === 'login' ? 'Your QOOHI admin login code' : 'Complete your QOOHI admin registration',
+    bodyLines: [
+      `Hello ${fullName || existing?.name || 'Admin'},`,
+      '',
+      `Your QOOHI admin verification code is: ${code}`,
+      '',
+      'This code expires in 10 minutes.',
+      '',
+      'If you did not request this code, ignore this email.',
+      '',
+      'QOOHI',
+    ],
+  });
+
+  return c.json({ ok: true, message: 'Verification code sent.' });
+});
+
+app.post("/api/admin/auth/verify-code", async (c) => {
+  const body = await c.req.json();
+  const email = normalizeEmail(body.email);
+  const code = String(body.code || "").trim();
+  const mode = body.mode === "login" ? "login" : "register";
+  const fullName = String(body.fullName || "").trim();
+
+  if (!email || !code) {
+    return c.json({ error: "Email and code are required." }, 400);
+  }
+
+  const codeRow = await c.env.DB.prepare(
+    `SELECT * FROM auth_codes
+     WHERE email = ? AND code = ? AND purpose = 'admin' AND consumed_at IS NULL
+     ORDER BY created_at DESC
+     LIMIT 1`,
+  )
+    .bind(email, code)
+    .first();
+
+  if (!codeRow) {
+    return c.json({ error: "Invalid verification code." }, 400);
+  }
+
+  if (new Date(codeRow.expires_at).getTime() < Date.now()) {
+    return c.json({ error: "Verification code has expired." }, 400);
+  }
+
+  await c.env.DB.prepare("UPDATE auth_codes SET consumed_at = ? WHERE id = ?")
+    .bind(new Date().toISOString(), codeRow.id)
+    .run();
+
+  const metadata = safeJsonParse(codeRow.metadata_json);
+  let account = db.prepare("SELECT * FROM admin_accounts WHERE LOWER(email) = LOWER(?)").get(email) || null;
+
+  if (mode === 'register') {
+    const name = fullName || metadata.fullName || account?.name || '';
+    if (!name) {
+      return c.json({ error: 'Full name is required.' }, 400);
+    }
+
+    if (account) {
+      if (Number(account.active || 0) !== 1) {
+        return c.json({ error: 'This admin account is inactive.' }, 403);
+      }
+      db.prepare("UPDATE admin_accounts SET name = ? WHERE id = ?").run(name, account.id);
+      account = db.prepare("SELECT * FROM admin_accounts WHERE id = ?").get(account.id);
+    } else {
+      const count = db.prepare("SELECT COUNT(*) as total FROM admin_accounts WHERE active = 1").get();
+      if (Number(count?.total || 0) >= 5) {
+        return c.json({ error: 'Maximum of 5 admin accounts allowed.' }, 400);
+      }
+      const accessKey = generateAdminKey();
+      db.prepare("INSERT INTO admin_accounts (name, email, access_key, is_superadmin, active) VALUES (?, ?, ?, 0, 1)")
+        .run(name, email, accessKey);
+      account = db.prepare("SELECT * FROM admin_accounts WHERE email = ?").get(email);
+    }
+  }
+
+  if (!account || Number(account.active || 0) !== 1) {
+    return c.json({ error: 'No active admin account found for that email.' }, 404);
+  }
+
+  return c.json({
+    ok: true,
+    accessKey: account.access_key,
+    account: {
+      id: account.id,
+      name: account.name,
+      email: account.email,
+      is_superadmin: Boolean(account.is_superadmin),
+      active: Boolean(account.active),
+    },
+  });
+});
+
 
 app.get("/api/admin/service-charges", async (c) => {
   if (!isAdmin(c)) return c.json({ error: "Unauthorized." }, 401);
@@ -1264,7 +1559,29 @@ async function requireSession(c) {
 
 function isAdmin(c) {
   const provided = c.req.header("x-admin-key") || "";
-  return Boolean(c.env.ADMIN_ACCESS_KEY) && provided === c.env.ADMIN_ACCESS_KEY;
+  if (!provided) return false;
+  if (c.env.ADMIN_ACCESS_KEY && provided === c.env.ADMIN_ACCESS_KEY) return true;
+  try {
+    const account = db.prepare("SELECT id FROM admin_accounts WHERE access_key = ? AND active = 1").get(provided);
+    return Boolean(account);
+  } catch { return false; }
+}
+
+function isSuperAdmin(c) {
+  const provided = c.req.header("x-admin-key") || "";
+  if (!provided) return false;
+  try {
+    const account = db.prepare("SELECT id FROM admin_accounts WHERE access_key = ? AND is_superadmin = 1 AND active = 1").get(provided);
+    return Boolean(account);
+  } catch { return false; }
+}
+
+function getCurrentAdminAccount(c) {
+  const provided = c.req.header("x-admin-key") || "";
+  if (!provided) return null;
+  try {
+    return db.prepare("SELECT * FROM admin_accounts WHERE access_key = ? AND active = 1").get(provided) || null;
+  } catch { return null; }
 }
 
 async function buildStudentDashboard(env, userId) {
@@ -1312,6 +1629,14 @@ async function buildStudentDashboard(env, userId) {
   )
     .bind(userId)
     .all();
+  const children = await env.DB.prepare(
+    `SELECT child_name, grade_level, goals, created_at
+     FROM parent_students
+     WHERE parent_user_id = ?
+     ORDER BY created_at DESC`,
+  )
+    .bind(userId)
+    .all();
 
   return {
     student: {
@@ -1325,6 +1650,7 @@ async function buildStudentDashboard(env, userId) {
       balance: user.balance,
       referralCode: user.referral_code,
       avatarUrl: user.avatar_url,
+      specializations: user.specializations || "",
     },
     enrollments: (enrollments.results || []).map((item) => ({
       ...item,
@@ -1337,6 +1663,7 @@ async function buildStudentDashboard(env, userId) {
     recentTransactions: transactions.results || [],
     deposits: deposits.results || [],
     withdrawals: withdrawals.results || [],
+    children: children.results || [],
     serviceCharges: await getServiceCharges(env),
     tournamentRegistration,
     tournament: tournamentRegistration ? await buildTournamentSummary(env) : null,
@@ -1379,7 +1706,7 @@ async function buildAdminGroups(env) {
 
   for (const role of ["teacher", "parent", "iep"]) {
     const result = await env.DB.prepare(
-      `SELECT id, full_name, email, whatsapp, created_at, role, assessment_status, performance_level, balance, avatar_url
+      `SELECT id, full_name, email, whatsapp, created_at, role, assessment_status, performance_level, balance, avatar_url, specializations
        FROM users
        WHERE role = ?
        ORDER BY full_name ASC`,
@@ -2177,6 +2504,78 @@ async function sendMail(env, { to, subject, bodyLines }) {
     console.error("Failed to send email:", error);
   }
 }
+
+// ── Admin Account Management ──
+
+app.get("/api/admin/accounts", async (c) => {
+  if (!isAdmin(c)) return c.json({ error: "Unauthorized." }, 401);
+  const accounts = db.prepare("SELECT id, name, email, is_superadmin, active, created_at FROM admin_accounts ORDER BY is_superadmin DESC, created_at ASC").all();
+  const currentAdmin = getCurrentAdminAccount(c);
+  return c.json({ accounts, isSuperAdmin: Boolean(currentAdmin?.is_superadmin) });
+});
+
+app.post("/api/admin/create-account", async (c) => {
+  if (!isAdmin(c)) return c.json({ error: "Unauthorized." }, 401);
+  const body = await c.req.json();
+  const name = (body.name || "").trim();
+  const email = (body.email || "").trim().toLowerCase();
+  if (!name || !email) return c.json({ error: "Name and email are required." }, 400);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return c.json({ error: "Invalid email address." }, 400);
+  const count = db.prepare("SELECT COUNT(*) as total FROM admin_accounts WHERE active = 1").get();
+  if (Number(count?.total || 0) >= 5) return c.json({ error: "Maximum of 5 admin accounts allowed." }, 400);
+  const existing = db.prepare("SELECT id FROM admin_accounts WHERE email = ?").get(email);
+  if (existing) return c.json({ error: "An admin account with this email already exists." }, 400);
+  const accessKey = generateAdminKey();
+  db.prepare("INSERT INTO admin_accounts (name, email, access_key, is_superadmin, active) VALUES (?, ?, ?, 0, 1)").run(name, email, accessKey);
+  return c.json({ success: true, accessKey, message: `Admin account created. Save this key — it will only be shown once.` });
+});
+
+app.post("/api/admin/remove-account", async (c) => {
+  if (!isSuperAdmin(c)) return c.json({ error: "Only the super admin can remove accounts." }, 403);
+  const body = await c.req.json();
+  const id = Number(body.id);
+  if (!id) return c.json({ error: "Account ID is required." }, 400);
+  const target = db.prepare("SELECT * FROM admin_accounts WHERE id = ?").get(id);
+  if (!target) return c.json({ error: "Account not found." }, 404);
+  if (target.is_superadmin) return c.json({ error: "The super admin account cannot be removed." }, 400);
+  db.prepare("UPDATE admin_accounts SET active = 0 WHERE id = ?").run(id);
+  return c.json({ success: true });
+});
+
+// ── Finance Analytics ──
+
+app.get("/api/finance/analytics", async (c) => {
+  const today = new Date();
+  const fmt = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+  // Last 7 days
+  const d7 = new Date(today); d7.setDate(d7.getDate() - 6);
+  // Start of this week (Monday)
+  const startOfWeek = new Date(today);
+  const dow = today.getDay();
+  startOfWeek.setDate(today.getDate() - ((dow + 6) % 7));
+  // Start of this month
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  // Fetch records for last 35 days to cover all ranges
+  const since = new Date(today); since.setDate(since.getDate() - 34);
+  const rows = db.prepare("SELECT date, total FROM finance WHERE date >= ? ORDER BY date ASC").all(fmt(since));
+  const parseNum = (v) => {
+    const n = Number(String(v || "").replace(/[^0-9.-]/g, ""));
+    return isNaN(n) ? 0 : n;
+  };
+  let last7 = 0, thisWeek = 0, thisMonth = 0;
+  for (const row of rows) {
+    const val = parseNum(row.total);
+    if (row.date >= fmt(d7) && row.date <= fmt(today)) last7 += val;
+    if (row.date >= fmt(startOfWeek) && row.date <= fmt(today)) thisWeek += val;
+    if (row.date >= fmt(startOfMonth) && row.date <= fmt(today)) thisMonth += val;
+  }
+  return c.json({ last7Days: last7, thisWeek, thisMonth, asOf: fmt(today) });
+});
 
 // Serve static files from the React app
 app.use('/*', serveStatic({ root: './dist' }));

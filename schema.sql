@@ -10,7 +10,19 @@ CREATE TABLE IF NOT EXISTS users (
   referred_by INTEGER REFERENCES users(id),
   balance REAL NOT NULL DEFAULT 0,
   avatar_url TEXT,
+  specializations TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+
+CREATE TABLE IF NOT EXISTS parent_students (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  parent_user_id INTEGER NOT NULL,
+  child_name TEXT NOT NULL,
+  grade_level TEXT NOT NULL,
+  goals TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (parent_user_id) REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS auth_codes (
@@ -139,7 +151,18 @@ INSERT OR IGNORE INTO service_charges (service_key, label, description, charge_k
   ('iep_assessment', 'IEP Assessment', 'Individualized education assessment and support', 0, 1, 8),
   ('teacher_registration', 'Teacher Registration', 'Teacher onboarding and account setup', 0, 1, 9),
   ('parent_registration', 'Parent Registration', 'Parent onboarding and account setup', 0, 1, 10),
-  ('profile_update', 'Profile Update', 'Profile photo and details editing', 0, 1, 11);
+  ('materials_download', 'Materials Download', 'AI-generated Kenyan curriculum materials', 10, 1, 11),
+  ('profile_update', 'Profile Update', 'Profile photo and details editing', 0, 1, 12);
+
+CREATE TABLE IF NOT EXISTS admin_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  access_key TEXT NOT NULL UNIQUE,
+  is_superadmin INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 CREATE TABLE IF NOT EXISTS transactions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
