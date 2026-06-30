@@ -136,6 +136,7 @@ export default function AdminApp() {
   const [loading, setLoading] = useState(false);
   const [adminVerified, setAdminVerified] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
+  const [groupDetailView, setGroupDetailView] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
   const [financeDate, setFinanceDate] = useState(getLocalDateKey());
   const [financeRecord, setFinanceRecord] = useState(
@@ -145,6 +146,8 @@ export default function AdminApp() {
     yesterday: normalizeFinanceRecord({}, shiftDate(getLocalDateKey(), -1)),
     weekAgo: normalizeFinanceRecord({}, shiftDate(getLocalDateKey(), -7)),
   });
+  const [analyticsDate, setAnalyticsDate] = useState(getLocalDateKey());
+  const [analytics, setAnalytics] = useState(null);
   const [composer, setComposer] = useState({
     subject: "",
     message: "",
@@ -226,8 +229,35 @@ export default function AdminApp() {
   }, [financeDate]);
 
   useEffect(() => {
+    fetch(`${API_BASE}/api/finance/analytics?date=${analyticsDate}`)
+      .then((r) => r.json())
+      .catch(() => ({}))
+      .then((data) => setAnalytics(data));
+  }, [analyticsDate]);
+
+  useEffect(() => {
     setServiceDrafts(buildServiceChargeDrafts(serviceCharges));
   }, [serviceCharges]);
+
+  useEffect(() => {
+    setGroupDetailView(false);
+    if (adminSection === "finance") {
+      Promise.all([
+        loadFinanceRecord(financeDate),
+        loadFinanceRecord(shiftDate(financeDate, -1)),
+        loadFinanceRecord(shiftDate(financeDate, -7)),
+      ])
+        .then(([today, yesterday, weekAgo]) => {
+          setFinanceRecord(today);
+          setHistoryData({ yesterday, weekAgo });
+        })
+        .catch(() => {});
+      fetch(`${API_BASE}/api/finance/analytics?date=${analyticsDate}`)
+        .then((r) => r.json())
+        .catch(() => ({}))
+        .then((data) => setAnalytics(data));
+    }
+  }, [adminSection]);
 
 
   const loadCollections = async (key = adminKey) => {
@@ -335,6 +365,31 @@ export default function AdminApp() {
     }
   };
 
+  const verifyAdminAccount = async (account) => {
+    setRemovingAdminId(account.id);
+    setAdminCreateError("");
+    try {
+      await fetchJson(
+        "/api/admin/verify-account",
+        adminKey,
+        "POST",
+        JSON.stringify({ id: account.id }),
+      );
+      await loadAdminAccounts(adminKey);
+      await loadOverview();
+      setAdminCreateResult({
+        name: account.name,
+        email: account.email,
+        accessKey: "",
+        message: `${account.name || account.email} has been verified.`,
+      });
+    } catch (err) {
+      setAdminCreateError(err.message);
+    } finally {
+      setRemovingAdminId(null);
+    }
+  };
+
   const requestAdminCode = async (event) => {
     event.preventDefault();
     setAdminAuthError("");
@@ -378,6 +433,13 @@ export default function AdminApp() {
           code: adminAuthForm.code,
         }),
       );
+      if (data.pending) {
+        setAdminAuthStatus(data.message || "Pending verification.");
+        setAdminAuthStage("form");
+        setAdminAuthForm({ fullName: "", email: "", code: "" });
+        return;
+      }
+      localStorage.setItem("qoohi_admin_key", data.accessKey);
       setAdminKey(data.accessKey);
       setAdminVerified(true);
       setAdminSection("overview");
@@ -391,6 +453,50 @@ export default function AdminApp() {
       setVerifyingAdminCode(false);
     }
   };
+
+  const logoutAdmin = () => {
+    localStorage.removeItem("qoohi_admin_key");
+    setAdminKey("");
+    setAdminVerified(false);
+    setOverview(null);
+    setAdminSection("overview");
+    setAdminAuthStage("form");
+    setAdminAuthForm({ fullName: "", email: "", code: "" });
+    setAdminAuthStatus("");
+    setAdminAuthError("");
+  };
+
+  // Auto-restore admin session from localStorage on mount
+  useEffect(() => {
+    const savedKey = localStorage.getItem("qoohi_admin_key");
+    if (savedKey) {
+      setAdminKey(savedKey);
+      fetchJson("/api/admin/overview", savedKey).then((data) => {
+        setOverview(data);
+        setServiceCharges(Array.isArray(data.serviceCharges) ? data.serviceCharges : []);
+        setAdminVerified(true);
+        if (!selectedGroup) {
+          const firstVisibleGroup = (data.groups || []).find((group) => group.key !== "tournament");
+          if (firstVisibleGroup) setSelectedGroup(firstVisibleGroup);
+        }
+        return Promise.all([
+          fetchJson("/api/admin/users/all", savedKey),
+          fetchJson("/api/admin/deposits", savedKey),
+          fetchJson("/api/admin/withdrawals", savedKey),
+          fetchJson("/api/admin/accounts", savedKey),
+        ]);
+      }).then(([usersData, depositsData, withdrawalsData, accountsData]) => {
+        setUsers(usersData.users || []);
+        setDeposits(depositsData.deposits || []);
+        setWithdrawals(withdrawalsData.withdrawals || []);
+        setAdminAccounts(accountsData.accounts || []);
+        setIsSuperAdminUser(accountsData.isSuperAdmin || false);
+      }).catch(() => {
+        localStorage.removeItem("qoohi_admin_key");
+        setAdminKey("");
+      });
+    }
+  }, []);
 
   const visibleGroups = (overview?.groups || []).filter((group) => group.key !== "tournament");
   const activeGroup = visibleGroups.find((group) => group.key === selectedGroup?.key) || null;
@@ -803,11 +909,16 @@ export default function AdminApp() {
                       </button>
                     ))}
                   </nav>
-                  <div className="border-t border-white/10 p-3">
+                  <div className="border-t border-white/10 p-3 space-y-1">
                     <button type="button" onClick={loadOverview}
                       className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 transition hover:bg-white/5 hover:text-white"
                     >
                       <FaRedo className="text-xs" /> Refresh Data
+                    </button>
+                    <button type="button" onClick={logoutAdmin}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-rose-400 transition hover:bg-rose-500/10 hover:text-rose-300"
+                    >
+                      <FaTimes className="text-xs" /> Logout
                     </button>
                   </div>
                 </div>
@@ -1143,6 +1254,12 @@ export default function AdminApp() {
                         <p>Ksh {Number(item.amount || 0).toLocaleString()}</p>
                         <p>Reference: {item.mpesa_ref || "-"}</p>
                         <p>Phone: {item.phone || "-"}</p>
+                        {item.mpesa_message && (
+                          <div className="mt-1 rounded-xl border border-white/10 bg-slate-950/60 px-3 py-3">
+                            <p className="mb-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">M-Pesa Message</p>
+                            <p className="text-xs text-slate-300 leading-5 whitespace-pre-wrap">{item.mpesa_message}</p>
+                          </div>
+                        )}
                       </div>
                       <label className="mt-4 block">
                         <span className="mb-2 block text-xs font-bold uppercase tracking-[0.24em] text-slate-400">Admin note</span>
@@ -1242,75 +1359,79 @@ export default function AdminApp() {
                                 {/* GROUPS section */}
                 {adminSection === "groups" && (
             <section className="space-y-4">
-              <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Groups</p>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {visibleGroups.map((group) => {
-                  const Icon = groupIcons[group.key] || FaUsers;
-                  return (
-                    <button
-                      key={group.key}
-                      type="button"
-                      onClick={() => {
-                        setSelectedGroup(group);
-                        setSelectedMember(null);
-                      }}
-                      className={`overflow-hidden rounded-[1.8rem] border p-6 text-left backdrop-blur-xl transition ${
-                        selectedGroup?.key === group.key
-                          ? "border-cyan-300/50 bg-cyan-300/10"
-                          : "border-white/10 bg-white/10 hover:border-white/20"
-                      }`}
-                    >
-                      <div className={`rounded-[1.3rem] bg-gradient-to-br ${groupColors[group.key]} p-5`}>
-                        <Icon className="text-3xl text-white" />
-                        <p className="mt-8 text-xs font-bold uppercase tracking-[0.3em] text-white/80">Category</p>
-                        <h2 className="mt-2 text-2xl font-black text-white">{group.name}</h2>
-                        <p className="mt-2 text-sm text-white/80">{group.count} members</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {activeGroup && (
-                <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-                  <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
-                    <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Group details</p>
-                    <h2 className="mt-2 text-2xl font-black text-white">{activeGroup.name}</h2>
-                    <p className="mt-2 text-sm text-slate-300">{activeGroup.count} member{activeGroup.count === 1 ? "" : "s"}</p>
-                    <div className="mt-6 grid gap-3">
-                      {activeGroup.members.map((member) => {
-                        const whatsappDigits = String(member.whatsapp || "").replace(/\D/g, "");
-                        const whatsappLink = whatsappDigits
-                          ? `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(`Hello ${member.full_name || "there"}, QOOHI admin is reaching out.`)}`
-                          : null;
-                        return (
-                          <div key={member.id} className="rounded-[1.4rem] border border-white/10 bg-slate-950/45 p-4">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                              <div>
-                                <p className="text-base font-black text-white">{member.full_name}</p>
-                                <p className="mt-1 text-sm text-slate-300">{member.email}</p>
-                                <p className="mt-1 text-sm text-slate-300">{member.whatsapp || "No WhatsApp number"}</p>
-                              </div>
-                              {whatsappLink && (
-                                <a
-                                  href={whatsappLink}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center justify-center rounded-full bg-emerald-400 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-emerald-300"
-                                >
-                                  Text on WhatsApp
-                                </a>
-                              )}
+              {groupDetailView && activeGroup ? (
+                <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
+                  <button
+                    type="button"
+                    onClick={() => setGroupDetailView(false)}
+                    className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/10"
+                  >
+                    ← Back to groups
+                  </button>
+                  <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Group details</p>
+                  <h2 className="mt-2 text-2xl font-black text-white">{activeGroup.name}</h2>
+                  <p className="mt-2 text-sm text-slate-300">{activeGroup.count} member{activeGroup.count === 1 ? "" : "s"}</p>
+                  <div className="mt-6 grid gap-3">
+                    {activeGroup.members.map((member) => {
+                      const whatsappDigits = String(member.whatsapp || "").replace(/\D/g, "");
+                      const whatsappLink = whatsappDigits
+                        ? `https://wa.me/${whatsappDigits}?text=${encodeURIComponent(`Hello ${member.full_name || "there"}, QOOHI admin is reaching out.`)}`
+                        : null;
+                      return (
+                        <div key={member.id} className="rounded-[1.4rem] border border-white/10 bg-slate-950/45 p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <p className="text-base font-black text-white">{member.full_name}</p>
+                              <p className="mt-1 text-sm text-slate-300">{member.email}</p>
+                              <p className="mt-1 text-sm text-slate-300">{member.whatsapp || "No WhatsApp number"}</p>
                             </div>
+                            {whatsappLink && (
+                              <a
+                                href={whatsappLink}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center justify-center rounded-full bg-emerald-400 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-emerald-300"
+                              >
+                                Text on WhatsApp
+                              </a>
+                            )}
                           </div>
-                        );
-                      })}
-                      {activeGroup.members.length === 0 && (
-                        <p className="rounded-[1.4rem] border border-white/10 bg-slate-950/40 px-4 py-5 text-slate-300">No members in this category yet.</p>
-                      )}
-                    </div>
+                        </div>
+                      );
+                    })}
+                    {activeGroup.members.length === 0 && (
+                      <p className="rounded-[1.4rem] border border-white/10 bg-slate-950/40 px-4 py-5 text-slate-300">No members in this category yet.</p>
+                    )}
                   </div>
                 </div>
+              ) : (
+                <>
+                  <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Groups</p>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    {visibleGroups.map((group) => {
+                      const Icon = groupIcons[group.key] || FaUsers;
+                      return (
+                        <button
+                          key={group.key}
+                          type="button"
+                          onClick={() => {
+                            setSelectedGroup(group);
+                            setSelectedMember(null);
+                            setGroupDetailView(true);
+                          }}
+                          className="overflow-hidden rounded-[1.8rem] border border-white/10 bg-white/10 p-6 text-left backdrop-blur-xl transition hover:border-white/20"
+                        >
+                          <div className={`rounded-[1.3rem] bg-gradient-to-br ${groupColors[group.key]} p-5`}>
+                            <Icon className="text-3xl text-white" />
+                            <p className="mt-8 text-xs font-bold uppercase tracking-[0.3em] text-white/80">Category</p>
+                            <h2 className="mt-2 text-2xl font-black text-white">{group.name}</h2>
+                            <p className="mt-2 text-sm text-white/80">{group.count} members</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </section>
                 )}
@@ -1397,14 +1518,15 @@ export default function AdminApp() {
                   <div className="mt-6 grid gap-3">
                     {adminAccounts.map((account) => {
                       const isActive = Number(account.active || 0) === 1;
-                      const removable = isSuperAdminUser && !account.is_superadmin && isActive;
+                      const removable = isSuperAdminUser && !account.is_superadmin;
+                      const isPending = !account.is_superadmin && !isActive && !account.removed;
                       return (
                         <div
                           key={account.id}
                           className={`rounded-[1.5rem] border p-4 ${
                             isActive
                               ? "border-white/10 bg-slate-950/45"
-                              : "border-rose-300/20 bg-rose-400/10"
+                              : "border-amber-300/20 bg-amber-400/5"
                           }`}
                         >
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1423,9 +1545,9 @@ export default function AdminApp() {
                                 <span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.24em] ${
                                   isActive
                                     ? "bg-emerald-400/15 text-emerald-200"
-                                    : "bg-rose-400/15 text-rose-200"
+                                    : "bg-amber-400/15 text-amber-200"
                                 }`}>
-                                  {isActive ? "Active" : "Inactive"}
+                                  {isActive ? "Active" : "Pending"}
                                 </span>
                               </div>
                               <p className="mt-2 text-sm text-slate-300">{account.email}</p>
@@ -1434,7 +1556,27 @@ export default function AdminApp() {
                               </p>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              {removable && (
+                              {removable && !isActive && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => verifyAdminAccount(account)}
+                                    disabled={removingAdminId === account.id}
+                                    className="inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-emerald-300/10 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-emerald-100 transition hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <FaCheck /> {removingAdminId === account.id ? "..." : "Verify"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeAdminAccount(account)}
+                                    disabled={removingAdminId === account.id}
+                                    className="inline-flex items-center gap-2 rounded-full border border-rose-300/30 bg-rose-300/10 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-rose-100 transition hover:bg-rose-300/20 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <FaTrash /> {removingAdminId === account.id ? "..." : "Delete"}
+                                  </button>
+                                </>
+                              )}
+                              {removable && isActive && (
                                 <button
                                   type="button"
                                   onClick={() => removeAdminAccount(account)}
@@ -1443,11 +1585,6 @@ export default function AdminApp() {
                                 >
                                   <FaTrash /> {removingAdminId === account.id ? "Removing..." : "Remove"}
                                 </button>
-                              )}
-                              {!account.is_superadmin && !isActive && (
-                                <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-400">
-                                  Removed
-                                </span>
                               )}
                             </div>
                           </div>
@@ -1528,15 +1665,43 @@ export default function AdminApp() {
                 </table>
               </div>
 
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <div className="mt-6 grid gap-4 md:grid-cols-1">
                 <HistoryCard
                   label={`Yesterday • ${formatDayTitle(shiftDate(financeDate, -1))}`}
                   record={historyData.yesterday}
                 />
-                <HistoryCard
-                  label={`7 Days Ago • ${formatDayTitle(shiftDate(financeDate, -7))}`}
-                  record={historyData.weekAgo}
-                />
+              </div>
+
+              {/* Income analytics */}
+              <div className="mt-8">
+                <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Income Summary</p>
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-slate-400 font-semibold">Select date:</label>
+                    <input
+                      type="date"
+                      value={analyticsDate}
+                      onChange={(e) => setAnalyticsDate(e.target.value)}
+                      className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/60"
+                    />
+                  </div>
+                </div>
+                <p className="mb-4 text-xs text-slate-500">Select date to see total income for that day, its week, month, and year.</p>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    { label: "Daily Income", value: analytics?.dailyIncome, color: "text-cyan-300", bg: "border-cyan-400/20 bg-cyan-400/5" },
+                    { label: "Weekly Income", value: analytics?.weeklyIncome, color: "text-emerald-300", bg: "border-emerald-400/20 bg-emerald-400/5" },
+                    { label: "Monthly Income", value: analytics?.monthlyIncome, color: "text-amber-300", bg: "border-amber-400/20 bg-amber-400/5" },
+                    { label: "Yearly Income", value: analytics?.yearlyIncome, color: "text-violet-300", bg: "border-violet-400/20 bg-violet-400/5" },
+                  ].map(({ label, value, color, bg }) => (
+                    <div key={label} className={`rounded-[1.5rem] border p-5 ${bg}`}>
+                      <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">{label}</p>
+                      <p className={`mt-3 text-3xl font-black ${color}`}>
+                        Ksh {Number(value || 0).toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </section>
                 )}

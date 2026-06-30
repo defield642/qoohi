@@ -3,7 +3,19 @@ import react from '@vitejs/plugin-react-swc'
 
 export default defineConfig({
   base: '/',
-  plugins: [react()],
+  plugins: [react(), {
+    name: 'spa-fallback',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url === '/admin') {
+          req.url = '/admin.html';
+        } else if (req.url === '/caleb') {
+          req.url = '/caleb.html';
+        }
+        next();
+      });
+    },
+  }],
   server: {
     host: '0.0.0.0',
     port: 5000,

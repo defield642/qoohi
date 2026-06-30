@@ -3,6 +3,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -243,6 +244,7 @@ export default function UserApp() {
   const [pendingVerification, setPendingVerification] = useState({
     email: "",
     mode: "register",
+    selectedRole: "",
   });
   const [sessionToken, setSessionToken] = useState(
     localStorage.getItem("qoohi_session_token") || "",
@@ -340,15 +342,16 @@ export default function UserApp() {
     setPendingVerification({
       email: payload.email,
       mode: payload.mode,
+      selectedRole: payload.selectedRole || "",
     });
     setStatusMessage(data.message || "Verification code sent.");
     goTo("verify");
   };
 
-  const handleCodeVerify = async ({ email, code, mode }) => {
+  const handleCodeVerify = async ({ email, code, mode, selectedRole }) => {
     const data = await fetchJson("/api/auth/verify-code", {
       method: "POST",
-      body: JSON.stringify({ email, code, mode }),
+      body: JSON.stringify({ email, code, mode, selectedRole: selectedRole || undefined }),
     });
     localStorage.setItem("qoohi_session_token", data.sessionToken);
     setSessionToken(data.sessionToken);
@@ -374,7 +377,7 @@ export default function UserApp() {
         backgroundAttachment: "fixed",
       }}
     >
-      <Header route={route} goTo={goTo} />
+      <Header route={route} goTo={goTo} dashboard={dashboard} />
       <main className="mx-auto min-h-screen max-w-7xl px-4 pb-32 pt-4 sm:px-6 lg:px-8">
         <AnimatePresence mode="wait">
           <MotionDiv
@@ -409,7 +412,7 @@ export default function UserApp() {
               />
             )}
             {route === "about" && <AboutPage goTo={goTo} />}
-            {route === "iep" && <IEPPage openIepRegistration={openIepRegistration} />}
+            {route === "iep" && <IEPPage openIepRegistration={openIepRegistration} openParentRegistration={openParentRegistration} />}
             {route === "teachers" && <TeachersPage openTeacherRegistration={openTeacherRegistration} />}
             {route === "resources" && <ResourcesPage openParentRegistration={openParentRegistration} />}
             {route === "games" && <GamesPage />}
@@ -451,17 +454,29 @@ export default function UserApp() {
                 teacherOverview={teacherOverview}
                 sessionToken={sessionToken}
                 goTo={goTo}
+                openParentRegistration={openParentRegistration}
                 onRefresh={refreshDashboard}
                 onUpdateIep={async (userId, assessmentStatus, performanceLevel) => {
                   try {
-                    const data = await fetchJson(`/api/admin/users/${userId}/iep`, {
-                      method: "POST",
-                      // Reuse admin endpoint if teacher has key, but wait, teachers use session!
-                      // I should add a teacher-specific IEP update endpoint or modify the admin one.
-                      headers: { Authorization: `Bearer ${sessionToken}` },
-                      body: JSON.stringify({ assessmentStatus, performanceLevel }),
+                    const isParentStudent = String(userId).startsWith("ps_");
+                    if (isParentStudent) {
+                      const childId = String(userId).replace("ps_", "");
+                      const data = await fetchJson("/api/teacher/children/iep", {
+                        method: "POST",
+                        headers: { ...authHeaders, "Content-Type": "application/json" },
+                        body: JSON.stringify({ childId: Number(childId), assessmentStatus, performanceLevel }),
+                      });
+                    } else {
+                      const data = await fetchJson(`/api/admin/users/${userId}/iep`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${sessionToken}` },
+                        body: JSON.stringify({ assessmentStatus, performanceLevel }),
+                      });
+                    }
+                    const refreshed = await fetchJson("/api/teacher/overview", {
+                      headers: authHeaders,
                     });
-                    setTeacherOverview(data);
+                    setTeacherOverview(refreshed);
                   } catch (err) {
                     setStatusMessage(err.message);
                   }
@@ -479,24 +494,41 @@ export default function UserApp() {
   );
 }
 
-function Header({ route, goTo }) {
+const menuNavItems = [
+  { id: "iep", label: "Learner IEP" },
+  { id: "teachers", label: "Teachers" },
+  { id: "resources", label: "Resources" },
+  { id: "learn", label: "Learn" },
+  { id: "games", label: "Games" },
+  { id: "new", label: "New on QOOHI" },
+  { id: "qoohiai", label: "QOOHI AI" },
+  { id: "about", label: "About" },
+  { id: "contact", label: "Contact" },
+];
+
+function Header({ route, goTo, dashboard }) {
   const [logoFailed, setLogoFailed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const handleMenu = (id) => {
+    goTo(id);
+    setMenuOpen(false);
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/5 bg-slate-950/80 shadow-2xl backdrop-blur-2xl">
-      <div className="mx-auto max-w-[1400px] px-[clamp(0.75rem,2vw,1.5rem)] py-[clamp(0.5rem,1vw,0.8rem)] sm:px-[clamp(1rem,2vw,1.5rem)]">
-        <div className="flex items-center gap-[clamp(0.5rem,1vw,0.9rem)]">
+      <div className="mx-auto max-w-[1400px] px-4 py-3 sm:px-6">
+        <div className="flex items-center gap-3">
+          {/* Logo */}
           <button
             type="button"
             onClick={() => goTo("home")}
-            className="group flex flex-shrink-0 items-center gap-[clamp(0.35rem,0.8vw,0.75rem)] transition-transform active:scale-95"
+            className="group flex flex-shrink-0 items-center gap-3 transition-transform active:scale-95"
           >
-            <div className="relative h-[clamp(2.2rem,5vw,3.5rem)] w-[clamp(2.2rem,5vw,3.5rem)]">
+            <div className="relative h-10 w-10 sm:h-12 sm:w-12">
               <div className="absolute -inset-1 rounded-xl bg-cyan-400 opacity-20 blur-md transition-opacity group-hover:opacity-40" />
               {logoFailed ? (
-                <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-cyan-400 text-[clamp(1rem,2vw,1.35rem)] font-black text-slate-900">
-                  Q
-                </div>
+                <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-cyan-400 text-lg font-black text-slate-900">Q</div>
               ) : (
                 <img
                   src={QoohiLogo}
@@ -507,49 +539,82 @@ function Header({ route, goTo }) {
               )}
             </div>
             <div className="hidden text-left sm:block">
-              <h1 className="text-[clamp(1rem,2vw,1.45rem)] font-black leading-none tracking-[-0.02em] text-white">
-                QOOHI
-              </h1>
-              <p className="mt-1 text-[clamp(0.42rem,0.9vw,0.62rem)] font-black uppercase tracking-[0.38em] text-cyan-400">
-                Digital Future
-              </p>
+              <h1 className="text-xl font-black leading-none tracking-tight text-white">QOOHI</h1>
+              <p className="mt-0.5 text-[9px] font-black uppercase tracking-[0.4em] text-cyan-400">Digital Future</p>
             </div>
           </button>
 
-          <nav className="min-w-0 flex-1">
-            <div
-              className="no-scrollbar flex w-full items-center overflow-x-auto rounded-[clamp(0.85rem,2vw,1.2rem)] border border-white/10 bg-white/5 px-[clamp(0.2rem,0.5vw,0.35rem)] py-[clamp(0.18rem,0.45vw,0.3rem)] backdrop-blur-md"
-              style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Nav Pills: Home + Dashboard */}
+          <nav className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => goTo("home")}
+              className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
+                route === "home"
+                  ? "bg-cyan-400 text-slate-900 shadow-[0_0_15px_rgba(34,211,238,0.35)]"
+                  : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
+              }`}
             >
-              <div className="flex w-max min-w-full items-center gap-[clamp(0.2rem,0.45vw,0.45rem)]">
-                {navItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    aria-current={route === item.id ? "page" : undefined}
-                    onClick={() => goTo(item.id)}
-                    className={`flex flex-none items-center gap-[clamp(0.2rem,0.45vw,0.4rem)] rounded-full px-[clamp(0.35rem,0.75vw,0.65rem)] py-[clamp(0.28rem,0.6vw,0.5rem)] text-[clamp(0.42rem,0.8vw,0.72rem)] font-black uppercase tracking-[0.16em] transition-all duration-300 ${
-                      route === item.id
-                        ? "bg-cyan-400 text-slate-900 shadow-[0_0_15px_rgba(34,211,238,0.35)]"
-                        : "text-slate-300 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <div className="h-[clamp(0.85rem,1.9vw,1.35rem)] w-[clamp(0.85rem,1.9vw,1.35rem)] overflow-hidden rounded-full">
-                      <img
-                        src={item.img}
-                        alt=""
-                        className="h-full w-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.style.display = "none";
-                        }}
-                      />
+              Home
+            </button>
+            <button
+              type="button"
+              onClick={() => goTo(dashboard ? "dashboard" : "login")}
+              className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
+                route === "dashboard" || route === "login"
+                  ? "bg-cyan-400 text-slate-900 shadow-[0_0_15px_rgba(34,211,238,0.35)]"
+                  : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
+              }`}
+            >
+              {dashboard ? "Dashboard" : "Login"}
+            </button>
+
+            {/* Menu Button */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuOpen((o) => !o)}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
+                  menuOpen
+                    ? "bg-white/15 text-white"
+                    : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                <span className="flex flex-col gap-[3px]">
+                  <span className={`block h-[2px] w-4 rounded-full bg-current transition-all ${menuOpen ? "translate-y-[5px] rotate-45" : ""}`} />
+                  <span className={`block h-[2px] w-4 rounded-full bg-current transition-all ${menuOpen ? "opacity-0" : ""}`} />
+                  <span className={`block h-[2px] w-4 rounded-full bg-current transition-all ${menuOpen ? "-translate-y-[5px] -rotate-45" : ""}`} />
+                </span>
+                <span className="hidden sm:inline">Menu</span>
+              </button>
+
+              {/* Dropdown */}
+              {menuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                  <div className="absolute right-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-2xl border border-white/15 bg-slate-950/95 shadow-2xl shadow-black/60 backdrop-blur-2xl">
+                    <div className="p-2">
+                      {menuNavItems.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleMenu(item.id)}
+                          className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold transition ${
+                            route === item.id
+                              ? "bg-cyan-500/20 text-cyan-300"
+                              : "text-slate-300 hover:bg-white/10 hover:text-white"
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
                     </div>
-                    <span className="whitespace-nowrap leading-none">
-                      {item.label}
-                    </span>
-                  </button>
-                ))}
-              </div>
+                  </div>
+                </>
+              )}
             </div>
           </nav>
         </div>
@@ -1002,7 +1067,7 @@ function AboutPage({ goTo }) {
   );
 }
 
-function IEPPage({ openIepRegistration }) {
+function IEPPage({ openIepRegistration, openParentRegistration }) {
   const voiceScript = "Welcome to the Individualized Education Program. Here, we don't just teach; we transform. Every student receives a unique diagnostic assessment to find their perfect learning band. From Foundational to Advanced, we map your path to success.";
 
   return (
@@ -1041,7 +1106,7 @@ function IEPPage({ openIepRegistration }) {
               ))}
             </div>
           </GlassPanel>
-          <ActionButton className="w-full !text-xl !py-6 !rounded-[2rem]" onClick={openIepRegistration}>Register for Assessment</ActionButton>
+          <ActionButton className="w-full !text-xl !py-6 !rounded-[2rem]" onClick={openParentRegistration}>Register Your Child Here</ActionButton>
         </div>
       </div>
     </PageStack>
@@ -1400,6 +1465,7 @@ function VerifyPage({ pendingVerification, onVerify, statusMessage }) {
         email: pendingVerification.email,
         code,
         mode: pendingVerification.mode,
+        selectedRole: pendingVerification.selectedRole,
       });
     } catch (err) {
       setError(err.message);
@@ -1426,13 +1492,42 @@ function LoginPage({ onSubmit, statusMessage }) {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [checkingRoles, setCheckingRoles] = useState(false);
+  const [dashboards, setDashboards] = useState([]);
+  const [selectedRole, setSelectedRole] = useState("");
 
   const submit = async (event) => {
     event.preventDefault();
+    if (!email.trim()) return;
+    setError("");
+    setCheckingRoles(true);
+    try {
+      const data = await fetchJson("/api/auth/check-roles", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      if (data.single) {
+        setDashboards([]);
+        setSubmitting(true);
+        await onSubmit({ email, selectedRole: "" });
+        setSubmitting(false);
+      } else if (data.dashboards && data.dashboards.length > 1) {
+        setDashboards(data.dashboards);
+      }
+    } catch (err) {
+      setError(err.message);
+      setDashboards([]);
+    } finally {
+      setCheckingRoles(false);
+    }
+  };
+
+  const selectAndLogin = async (role) => {
+    setSelectedRole(role);
     setSubmitting(true);
     setError("");
     try {
-      await onSubmit({ email });
+      await onSubmit({ email, selectedRole: role });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1442,14 +1537,46 @@ function LoginPage({ onSubmit, statusMessage }) {
 
   return (
     <CenteredPanel eyebrow="login">
-      <form className="space-y-4" onSubmit={submit}>
-        <Input label="Email address" type="email" value={email} onChange={setEmail} />
-        {statusMessage && <Notice tone="info">{statusMessage}</Notice>}
-        {error && <Notice tone="error">{error}</Notice>}
-        <ActionButton disabled={submitting} type="submit">
-          {submitting ? "Sending..." : "Send login code"}
-        </ActionButton>
-      </form>
+      {dashboards.length === 0 ? (
+        <form className="space-y-4" onSubmit={submit}>
+          <Input label="Email address" type="email" value={email} onChange={setEmail} />
+          {statusMessage && <Notice tone="info">{statusMessage}</Notice>}
+          {error && <Notice tone="error">{error}</Notice>}
+          <ActionButton disabled={submitting || checkingRoles} type="submit">
+            {checkingRoles ? "Checking..." : submitting ? "Sending..." : "Send login code"}
+          </ActionButton>
+        </form>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Select Dashboard</p>
+          <p className="text-sm text-slate-400">This email has multiple dashboards. Choose which one to open:</p>
+          <div className="space-y-2">
+            {dashboards.map((db, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => selectAndLogin(db.role)}
+                disabled={submitting}
+                className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
+              >
+                <div>
+                  <p className="font-bold text-white capitalize">{db.role}</p>
+                  <p className="text-xs text-slate-400">{db.name}</p>
+                </div>
+                <span className="rounded-full bg-cyan-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-cyan-300">Select</span>
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => { setDashboards([]); setEmail(""); }}
+            className="text-xs text-slate-500 hover:text-white transition"
+          >
+            Use a different email
+          </button>
+          {error && <Notice tone="error">{error}</Notice>}
+        </div>
+      )}
     </CenteredPanel>
   );
 }
@@ -1463,6 +1590,7 @@ function DashboardPage({
   goTo,
   sessionToken,
   onRefresh,
+  openParentRegistration,
 }) {
   const [showMessages, setShowMessages] = useState(false);
   const [editingIep, setEditingIep] = useState(null);
@@ -1478,11 +1606,8 @@ function DashboardPage({
     whatsapp: "",
     avatarUrl: "",
   });
-  const [depositForm, setDepositForm] = useState({
-    amount: "",
-    mpesaRef: "",
-    phone: "",
-  });
+  const [depositForm, setDepositForm] = useState({ mpesaMessage: "" });
+  const [depositResult, setDepositResult] = useState(null);
   const [withdrawForm, setWithdrawForm] = useState({
     amount: "",
     mpesaName: "",
@@ -1542,12 +1667,30 @@ function DashboardPage({
   const firstName = fullName?.split(" ")[0] || "";
   const profileScript = `Welcome ${firstName || ""} to your QOOHI dashboard. Review your profile, balance, services, and activity. Deposit funds, withdraw when needed, and keep your learning journey moving.`;
 
-  const allStudents = teacherOverview
-    ? teacherOverview.groups
-        .filter((g) => !["teacher", "parent"].includes(g.key))
-        .flatMap((g) => g.members)
+  const parentChildren = teacherOverview
+    ? (teacherOverview.children || []).map((c) => ({
+        id: `ps_${c.id}`,
+        full_name: c.child_name,
+        email: c.parent_email || "",
+        grade_level: c.grade_level,
+        goals: c.goals,
+        balance: 0,
+        performance_level: c.performance_level || 0,
+        assessment_status: c.assessment_status || "waiting",
+        isParentStudent: true,
+        parent_name: c.parent_name,
+        parent_whatsapp: c.parent_whatsapp,
+      }))
+    : [];
+
+  const enrolledStudents = teacherOverview
+    ? (teacherOverview.groups
+        ?.filter((g) => !["teacher", "parent"].includes(g.key))
+        .flatMap((g) => g.members) || [])
         .filter((v, i, a) => a.findIndex((t) => t.id === v.id) === i)
     : [];
+
+  const allStudents = [...parentChildren, ...enrolledStudents];
 
   const serviceActions = {
     computer_packages: { route: "learn", label: "Open Courses" },
@@ -1571,7 +1714,10 @@ function DashboardPage({
     ...(hasCourses ? [{ id: "courses", Icon: FaBookOpen, label: "Courses" }] : []),
     ...(isStudent && assessmentStatus === "completed" ? [{ id: "roadmap", Icon: FaGraduationCap, label: "Roadmap" }] : []),
     ...(isTeacher ? [{ id: "roster", Icon: FaChalkboardTeacher, label: "Roster" }] : []),
+    ...(isTeacher ? [{ id: "specializations", Icon: FaLayerGroup, label: "Specializations" }] : []),
     ...(isParent ? [{ id: "parent", Icon: FaUsers, label: "Support" }] : []),
+    ...(isParent ? [{ id: "register-child", Icon: FaUserGraduate, label: "Register Your Child" }] : []),
+    ...(isParent ? [{ id: "materials", Icon: FaBookOpen, label: "Materials" }] : []),
     ...(hasTournament ? [{ id: "tournament", Icon: FaTrophy, label: "Tournament" }] : []),
   ];
 
@@ -1628,20 +1774,16 @@ function DashboardPage({
     event.preventDefault();
     setSubmittingDeposit(true);
     setProfileStatus("");
+    setDepositResult(null);
     try {
-      await fetchJson("/api/deposit/submit", {
+      const res = await fetchJson("/api/deposit/mpesa-message", {
         method: "POST",
         headers: authHeaders,
-        body: JSON.stringify({
-          amount: depositForm.amount,
-          mpesaRef: depositForm.mpesaRef,
-          phone: depositForm.phone,
-        }),
+        body: JSON.stringify({ mpesaMessage: depositForm.mpesaMessage }),
       });
-      setDepositForm({ amount: "", mpesaRef: "", phone: "" });
-      setProfileStatus("Deposit request submitted for admin verification.");
+      setDepositForm({ mpesaMessage: "" });
+      setDepositResult(res);
       await onRefresh?.();
-      setProfileTab("view");
     } catch (err) {
       setProfileStatus(err.message);
     } finally {
@@ -2016,7 +2158,7 @@ function DashboardPage({
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
-                  onClick={() => { window.location.hash = "resources"; }}
+                  onClick={() => setActiveSection("materials")}
                   className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
                 >
                   <div className="rounded-xl bg-cyan-500/10 p-3"><FaBookOpen className="text-lg text-cyan-300" /></div>
@@ -2105,63 +2247,7 @@ function DashboardPage({
             </div>
           </div>
 
-          {/* Service charges */}
-          <GlassPanel className="p-6">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <SectionLabel>Services</SectionLabel>
-                <h3 className="mt-1 text-lg font-black text-white">Platform charges</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => openProfile("deposit")}
-                className="rounded-full bg-cyan-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-cyan-400 border border-cyan-500/20 hover:bg-cyan-500/20 transition"
-              >
-                Top Up
-              </button>
-            </div>
-            <div className="mt-4 space-y-2">
-              {serviceCharges.map((service) => {
-                const meta = serviceActions[service.service_key] || {};
-                const charge = Number(service.charge_ksh || 0);
-                const enabled = Number(service.active || 0) === 1;
-                const blocked = charge > 0 && !canAfford(charge);
-                const statusColor = !enabled ? "text-slate-600" : blocked ? "text-rose-400" : "text-emerald-400";
-                const statusLabel = !enabled ? "Disabled" : blocked ? "Top up needed" : meta.label || "Available";
-                return (
-                  <button
-                    key={service.service_key}
-                    type="button"
-                    disabled={!enabled}
-                    onClick={() => {
-                      if (!enabled) return;
-                      if (service.service_key === "profile_update") { openProfile("edit"); return; }
-                      if (blocked) { openProfile("deposit"); return; }
-                      if (meta.route) goTo(meta.route);
-                    }}
-                    className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition ${
-                      enabled && !blocked
-                        ? "border-white/10 bg-white/5 hover:border-cyan-400/25 hover:bg-cyan-400/5 cursor-pointer"
-                        : blocked
-                          ? "border-rose-500/15 bg-rose-500/5 cursor-pointer"
-                          : "border-white/5 bg-white/5 opacity-50 cursor-default"
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-white truncate">{service.label}</p>
-                      <p className={`text-[10px] font-bold uppercase tracking-wide ${statusColor}`}>{statusLabel}</p>
-                    </div>
-                    <p className="text-sm font-black text-cyan-300 flex-shrink-0">
-                      {charge > 0 ? `Ksh ${charge.toLocaleString()}` : "Free"}
-                    </p>
-                  </button>
-                );
-              })}
-              {serviceCharges.length === 0 && (
-                <p className="rounded-2xl border border-white/5 bg-white/5 px-4 py-4 text-sm text-slate-500">No services configured.</p>
-              )}
-            </div>
-          </GlassPanel>
+          {/* Activity section */}
 
           {/* Recent activity */}
           <GlassPanel className="p-6">
@@ -2438,20 +2524,71 @@ function DashboardPage({
 
           {/* SUPPORT section (parent) */}
           {activeSection === "parent" && (
-            <GlassPanel className="p-6 sm:p-8">
-              <SectionLabel>Parent Hub</SectionLabel>
-              <h3 className="mt-2 mb-8 text-2xl font-black text-white">Support your child's learning</h3>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-6">
-                  <div className="rounded-xl bg-cyan-500/10 p-4"><FaBookOpen className="text-2xl text-cyan-300" /></div>
-                  <div><p className="font-bold text-white">Purchase Materials</p><p className="mt-1 text-sm text-slate-500">Workbooks &amp; learning kits</p></div>
+            <div className="space-y-6">
+              <GlassPanel className="p-6 sm:p-8">
+                <SectionLabel>Parent Hub</SectionLabel>
+                <h3 className="mt-2 mb-6 text-2xl font-black text-white">Support your child's learning</h3>
+
+                {dashboard.children && dashboard.children.length > 0 ? (
+                  <div className="grid gap-4">
+                    {dashboard.children.map((child) => (
+                      <div key={child.id} className="rounded-[1.5rem] border border-white/10 bg-slate-950/45 p-5">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="text-lg font-black text-white">{child.child_name}</p>
+                            <p className="mt-1 text-sm text-slate-400">Grade {child.grade_level}</p>
+                            {child.goals && <p className="mt-2 text-sm text-slate-300">Goals: {child.goals}</p>}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {child.assessment_status === "completed" ? (
+                              <span className="rounded-full bg-emerald-400/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-emerald-200">
+                                IEP: {child.performance_level || "Completed"}
+                              </span>
+                            ) : child.assessment_status === "in_progress" ? (
+                              <span className="rounded-full bg-amber-400/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-amber-200">
+                                Assessment in progress
+                              </span>
+                            ) : (
+                              <span className="rounded-full bg-slate-400/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-300">
+                                Awaiting assessment
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500">No children registered yet. Use "Register Your Child" to add one.</p>
+                )}
+
+                <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                  <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-6">
+                    <div className="rounded-xl bg-emerald-500/10 p-4"><FaEnvelope className="text-2xl text-emerald-300" /></div>
+                    <div><p className="font-bold text-white">Contact Teacher</p><p className="mt-1 text-sm text-slate-500">Send a direct message</p></div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-6">
-                  <div className="rounded-xl bg-emerald-500/10 p-4"><FaEnvelope className="text-2xl text-emerald-300" /></div>
-                  <div><p className="font-bold text-white">Contact Teacher</p><p className="mt-1 text-sm text-slate-500">Send a direct message</p></div>
-                </div>
-              </div>
-            </GlassPanel>
+              </GlassPanel>
+            </div>
+          )}
+
+          {/* REGISTER CHILD section (parent) */}
+          {activeSection === "register-child" && (
+            <ParentRegisterChildSection authHeaders={authHeaders} />
+          )}
+
+          {/* MATERIALS section (parent) */}
+          {activeSection === "materials" && (
+            <ParentMaterialsSection authHeaders={authHeaders} balance={balance} openProfile={openProfile} />
+          )}
+
+          {/* SPECIALIZATIONS section (teacher) */}
+          {activeSection === "specializations" && (
+            <TeacherSpecializationsSection
+              key={dashboard.student?.specializations || ""}
+              authHeaders={authHeaders}
+              initialSpecs={dashboard.student?.specializations || ""}
+            />
           )}
 
           {/* TOURNAMENT section */}
@@ -2694,16 +2831,34 @@ function DashboardPage({
                   <form className="space-y-5 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-6" onSubmit={submitDeposit}>
                     <div>
                       <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Deposit via M-Pesa</p>
-                      <p className="mt-2 text-sm text-slate-400">Send any amount to the QOOHI M-Pesa till, then submit the reference below. Admin will verify and credit your balance.</p>
+                      <div className="mt-3 flex items-center gap-3 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3">
+                        <FaWallet className="flex-shrink-0 text-lg text-cyan-300" />
+                        <p className="text-sm font-bold text-cyan-100">Send to this M-Pesa Till: <span className="font-black text-white">7581346</span></p>
+                      </div>
                     </div>
-                    <Input label="Amount (Ksh)" type="number" value={depositForm.amount} onChange={(v) => setDepositForm((c) => ({ ...c, amount: v }))} />
-                    <Input label="M-Pesa transaction code" value={depositForm.mpesaRef} onChange={(v) => setDepositForm((c) => ({ ...c, mpesaRef: v }))} />
-                    <Input label="Phone number used" value={depositForm.phone} onChange={(v) => setDepositForm((c) => ({ ...c, phone: v }))} />
+                    <div>
+                      <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Paste your M-Pesa message here</label>
+                      <textarea
+                        rows={5}
+                        value={depositForm.mpesaMessage}
+                        onChange={(e) => setDepositForm({ mpesaMessage: e.target.value })}
+                        placeholder="e.g. SBT45XQG Confirmed. Ksh500.00 sent to QOOHI LTD 7581346 on 29/6/25..."
+                        className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/60 placeholder-slate-600 resize-none"
+                        required
+                      />
+                    </div>
+                    {depositResult && (
+                      <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-4 text-sm">
+                        <p className="font-black uppercase tracking-widest text-emerald-300 mb-2">✓ Credited!</p>
+                        <p className="text-emerald-100">Ksh <span className="font-black">{Number(depositResult.amount || 0).toLocaleString()}</span> has been added to your balance.</p>
+                        {depositResult.transactionCode && <p className="mt-1 text-xs text-emerald-300">Ref: {depositResult.transactionCode}</p>}
+                      </div>
+                    )}
                     <div className="flex gap-3 pt-2">
                       <ActionButton type="submit" disabled={submittingDeposit} className="!px-6 !py-3 !text-sm">
-                        {submittingDeposit ? "Submitting..." : "Submit Deposit"}
+                        {submittingDeposit ? "Processing..." : "Submit M-Pesa Message"}
                       </ActionButton>
-                      <SecondaryButton type="button" className="!px-6 !py-3 !text-sm" onClick={() => setProfileTab("view")}>Cancel</SecondaryButton>
+                      <SecondaryButton type="button" className="!px-6 !py-3 !text-sm" onClick={() => { setProfileTab("view"); setDepositResult(null); }}>Cancel</SecondaryButton>
                     </div>
                   </form>
                 )}
@@ -2732,6 +2887,374 @@ function DashboardPage({
         </div>
       )}
     </PageStack>
+  );
+}
+
+function ParentRegisterChildSection({ authHeaders }) {
+  const [childName, setChildName] = useState("");
+  const [gradeLevel, setGradeLevel] = useState("");
+  const [goals, setGoals] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState("");
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!childName.trim() || !gradeLevel.trim() || !goals.trim()) {
+      setStatus("All fields are required.");
+      return;
+    }
+    setSaving(true);
+    setStatus("");
+    try {
+      await fetchJson("/api/parent/children", {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ childName, gradeLevel, goals }),
+      });
+      setChildName("");
+      setGradeLevel("");
+      setGoals("");
+      setStatus("Child registered successfully!");
+    } catch (err) {
+      setStatus(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <GlassPanel className="p-6 sm:p-8">
+      <SectionLabel>Child Registration</SectionLabel>
+      <h3 className="mt-2 mb-4 text-2xl font-black text-white">Register Your Child</h3>
+      <p className="mb-8 text-sm text-slate-400 max-w-xl">
+        Register your child with QOOHI to access personalised IEP assessments and tailored learning resources designed for Kenyan CBC curriculum.
+      </p>
+      <form onSubmit={submit} className="space-y-4 max-w-xl">
+        <Input label="Child's full name" value={childName} onChange={setChildName} />
+        <Input label="Grade level" value={gradeLevel} onChange={setGradeLevel} />
+        <Input label="Learning goals" value={goals} onChange={setGoals} />
+        {status && (
+          <p className={`text-sm ${status === "Child registered successfully!" ? "text-emerald-400" : "text-rose-400"}`}>{status}</p>
+        )}
+        <ActionButton type="submit" disabled={saving} className="!px-6 !py-3 !text-sm">
+          {saving ? "Saving..." : "Register Your Child"}
+        </ActionButton>
+      </form>
+    </GlassPanel>
+  );
+}
+
+const KENYAN_SUBJECTS = {
+  lower: ["English", "Kiswahili", "Mathematics", "Environmental Activities", "Hygiene & Nutrition", "Religious Education", "Creative Arts"],
+  upper: ["English", "Kiswahili", "Mathematics", "Science & Technology", "Social Studies", "Religious Education", "Creative Arts", "Physical & Health Education", "Agriculture", "Home Science"],
+  junior: ["English", "Kiswahili", "Mathematics", "Integrated Science", "Social Studies", "Religious Education", "Business Studies", "Agriculture", "Life Skills", "Physical Education", "Visual Arts", "Performing Arts", "Computer Science"],
+};
+
+const SUBJECT_GRADIENTS = {
+  English: "from-blue-500/20 to-cyan-400/10",
+  Kiswahili: "from-emerald-500/20 to-teal-400/10",
+  Mathematics: "from-violet-500/20 to-purple-400/10",
+  "Science & Technology": "from-cyan-500/20 to-sky-400/10",
+  "Integrated Science": "from-cyan-500/20 to-sky-400/10",
+  "Social Studies": "from-amber-500/20 to-orange-400/10",
+  "Religious Education": "from-rose-500/20 to-pink-400/10",
+  "Creative Arts": "from-fuchsia-500/20 to-pink-400/10",
+  "Physical & Health Education": "from-lime-500/20 to-green-400/10",
+  Agriculture: "from-green-500/20 to-emerald-400/10",
+  "Home Science": "from-orange-500/20 to-amber-400/10",
+  "Business Studies": "from-indigo-500/20 to-blue-400/10",
+  "Life Skills": "from-teal-500/20 to-cyan-400/10",
+  "Physical Education": "from-lime-500/20 to-green-400/10",
+  "Visual Arts": "from-pink-500/20 to-rose-400/10",
+  "Performing Arts": "from-purple-500/20 to-violet-400/10",
+  "Computer Science": "from-sky-500/20 to-indigo-400/10",
+  "Environmental Activities": "from-emerald-500/20 to-green-400/10",
+  "Hygiene & Nutrition": "from-teal-500/20 to-cyan-400/10",
+};
+
+function getSubjectsForGrade(grade) {
+  const g = Number(grade);
+  if (g >= 1 && g <= 3) return KENYAN_SUBJECTS.lower;
+  if (g >= 4 && g <= 6) return KENYAN_SUBJECTS.upper;
+  if (g >= 7 && g <= 9) return KENYAN_SUBJECTS.junior;
+  return KENYAN_SUBJECTS.lower;
+}
+
+function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
+  const [grade, setGrade] = useState("1");
+  const [topic, setTopic] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [generated, setGenerated] = useState({});
+  const [matError, setMatError] = useState("");
+  const [downloading, setDownloading] = useState(null);
+
+  const subjects = getSubjectsForGrade(grade);
+
+  const gradeRef = useRef(grade);
+  gradeRef.current = grade;
+
+  useEffect(() => {
+    generateSubjects(grade);
+  }, []);
+
+  const generateSubjects = async (g) => {
+    setGenerating(true);
+    setMatError("");
+    const subjs = getSubjectsForGrade(g);
+    const jsonPrompt = `Return ONLY a valid JSON object (no markdown, no backticks) where keys are subject names and values are 2-3 sentence descriptions of what Grade ${g} students learn in that subject according to the Kenyan CBC curriculum. Subjects: ${subjs.join(", ")}. Example format: {"English": "Students learn to read and write basic English sentences..."}`;
+    try {
+      const res = await fetchJson("/api/ai/materials", {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ grade: g, topic: jsonPrompt }),
+      });
+      const content = (res.content || "").trim();
+      let parsed = {};
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const raw = JSON.parse(jsonMatch[0]);
+          parsed = raw;
+          const nestedKeys = ["Subject", "subjects", "Subjects", "subjects_list", "subjects_list"];
+          for (const k of nestedKeys) {
+            if (raw[k] && typeof raw[k] === "object" && !Array.isArray(raw[k])) {
+              const matchCount = subjs.filter((s) => raw[k][s]).length;
+              if (matchCount >= 2) { parsed = raw[k]; break; }
+            }
+          }
+        } catch {}
+      }
+      if (Object.keys(parsed).length === 0) {
+        const lines = content.split("\n").filter(Boolean);
+        subjs.forEach((subj) => {
+          const match = content.match(new RegExp(`\\*\\*${subj.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*\\*[\\s\\S]*?(?=\\n\\*\\*|$)`));
+          if (match) parsed[subj] = match[0].replace(/\*\*/g, "").replace(subj, "").trim();
+        });
+        if (Object.keys(parsed).length === 0) {
+          subjs.forEach((subj, i) => { parsed[subj] = lines[i] || ""; });
+        }
+      }
+      const newGenerated = {};
+      subjs.forEach((subj) => {
+        newGenerated[subj] = parsed[subj] || `${subj} — Core subject in the Grade ${g} Kenyan CBC curriculum. Students develop foundational knowledge and practical skills.`;
+      });
+      setGenerated(newGenerated);
+    } catch (err) {
+      setMatError(err.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const generateTopic = async (customTopic) => {
+    setGenerating(true);
+    setMatError("");
+    try {
+      const res = await fetchJson("/api/ai/materials", {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ grade: gradeRef.current, topic: customTopic }),
+      });
+      const content = res.content || "";
+      setGenerated({ [customTopic]: content });
+    } catch (err) {
+      setMatError(err.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleGradeChange = (g) => {
+    setGrade(g);
+    setTopic("");
+    setGenerated({});
+    setMatError("");
+    generateSubjects(g);
+  };
+
+  const handleCustomGenerate = (e) => {
+    e.preventDefault();
+    if (!topic.trim()) return;
+    generateTopic(topic.trim());
+  };
+
+  const downloadAs = async (format, subject, content) => {
+    setDownloading(subject);
+    setMatError("");
+    try {
+      await fetchJson("/api/ai/materials/download", {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ grade, topic: subject, content }),
+      });
+      const filename = `grade${grade}-${subject.replace(/\s+/g, "-").toLowerCase()}`;
+      if (format === "doc") {
+        const html = `<html><body><h1>Grade ${grade} - ${subject}</h1><pre style="font-family:sans-serif;font-size:14px;line-height:1.6">${content}</pre></body></html>`;
+        const blob = new Blob([html], { type: "application/msword" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${filename}.doc`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const blob = new Blob([content], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${filename}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (err) {
+      setMatError(err.message);
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  return (
+    <GlassPanel className="p-6 sm:p-8">
+      <SectionLabel>CBC Materials</SectionLabel>
+      <h3 className="mt-2 mb-2 text-2xl font-black text-white">Kenyan Curriculum Materials</h3>
+      <p className="mb-6 text-sm text-slate-400">Select a grade to view subjects. Click any subject card to see learning content.</p>
+
+      <div className="flex flex-wrap gap-4 mb-6">
+        <div className="w-full sm:w-48">
+          <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Grade</label>
+          <select
+            value={grade}
+            onChange={(e) => handleGradeChange(e.target.value)}
+            className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-400/60"
+          >
+            {Array.from({ length: 9 }, (_, i) => i + 1).map((g) => (
+              <option key={g} value={String(g)}>Grade {g}</option>
+            ))}
+          </select>
+        </div>
+        <form onSubmit={handleCustomGenerate} className="flex-1 flex items-end gap-2">
+          <div className="flex-1">
+            <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Custom topic</label>
+            <input
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder="Type any topic to generate specific content..."
+              className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-400/60 placeholder-slate-600"
+            />
+          </div>
+          <ActionButton type="submit" disabled={generating || !topic.trim()} className="!px-5 !py-3 !text-sm whitespace-nowrap">
+            {generating ? "..." : "Generate"}
+          </ActionButton>
+        </form>
+      </div>
+
+      {matError && <p className="mb-4 text-sm text-rose-400">{matError}</p>}
+
+      {generating && (
+        <div className="flex items-center gap-3 mb-6 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 px-5 py-4 text-sm text-cyan-200">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+          Generating learning materials...
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {subjects.map((subject) => {
+          const content = generated[subject];
+          const gradient = SUBJECT_GRADIENTS[subject] || "from-slate-500/20 to-slate-400/10";
+          return (
+            <div
+              key={subject}
+              className={`overflow-hidden rounded-[1.8rem] border transition ${
+                content ? "border-white/15 bg-white/10" : "border-white/5 bg-white/5"
+              }`}
+            >
+              <div className={`bg-gradient-to-br ${gradient} p-5`}>
+                <p className="text-xs font-black uppercase tracking-[0.3em] text-white/70">{subject}</p>
+                {content && (
+                  <p className="mt-1 text-xs text-white/50">Grade {grade}</p>
+                )}
+              </div>
+              <div className="p-4">
+                {content ? (
+                  <>
+                    <p className="text-sm text-slate-300 leading-6 line-clamp-4">{content}</p>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => downloadAs("txt", subject, content)}
+                        disabled={downloading === subject}
+                        className="flex-1 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-300 transition hover:bg-white/10 disabled:opacity-50"
+                      >
+                        {downloading === subject ? "..." : "PDF"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => downloadAs("doc", subject, content)}
+                        disabled={downloading === subject}
+                        className="flex-1 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-300 transition hover:bg-white/10 disabled:opacity-50"
+                      >
+                        {downloading === subject ? "..." : "Word"}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-500 italic">Waiting for content...</p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </GlassPanel>
+  );
+}
+
+function TeacherSpecializationsSection({ authHeaders, initialSpecs = "" }) {
+  const [specs, setSpecs] = useState(initialSpecs);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState("");
+
+  const save = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setStatus("");
+    try {
+      await fetchJson("/api/teacher/specializations", {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ specializations: specs }),
+      });
+      setStatus("Specializations saved successfully.");
+    } catch (err) {
+      setStatus(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <GlassPanel className="p-6 sm:p-8">
+      <SectionLabel>Teacher Profile</SectionLabel>
+      <h3 className="mt-2 mb-4 text-2xl font-black text-white">Add Specializations</h3>
+      <p className="mb-6 text-sm text-slate-400 max-w-xl">List the subjects and CBC strands you specialise in. This helps parents and students find the right teacher.</p>
+      <form onSubmit={save} className="space-y-4 max-w-xl">
+        <div>
+          <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Your Specializations</label>
+          <textarea
+            rows={5}
+            value={specs}
+            onChange={(e) => setSpecs(e.target.value)}
+            placeholder="e.g. Mathematics (Grade 4-9), Science, English Creative Writing, CBC Digital Literacy..."
+            className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-400/60 placeholder-slate-600 resize-none"
+            required
+          />
+        </div>
+        {status && <p className={`text-sm ${status.includes("success") ? "text-emerald-400" : "text-rose-400"}`}>{status}</p>}
+        <ActionButton type="submit" disabled={saving} className="!px-6 !py-3 !text-sm">
+          {saving ? "Saving..." : "Save Specializations"}
+        </ActionButton>
+      </form>
+    </GlassPanel>
   );
 }
 
