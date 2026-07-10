@@ -879,10 +879,10 @@ export default function AdminApp() {
             )}
 
             {/* ── Admin Sidebar Layout ── */}
-            <div className="flex flex-col gap-4 md:flex-row md:gap-6">
+            <div className="flex flex-row gap-6">
 
               {/* Admin Left Sidebar */}
-              <aside className="hidden md:flex flex-col w-52 flex-shrink-0">
+              <aside className="flex flex-col w-52 flex-shrink-0">
                 <div className="sticky top-24 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/90 backdrop-blur-xl">
                   <div className="border-b border-white/10 p-4">
                     <div className="flex items-center gap-3">
@@ -923,19 +923,6 @@ export default function AdminApp() {
                   </div>
                 </div>
               </aside>
-
-              {/* Admin Mobile Scroll Nav */}
-              <div className="flex md:hidden gap-2 overflow-x-auto pb-2">
-                {adminNav.map(({ id, Icon, label }) => (
-                  <button key={id} type="button" onClick={() => setAdminSection(id)}
-                    className={`flex flex-shrink-0 items-center gap-2 rounded-full px-3 py-2 text-[11px] font-bold transition ${
-                      adminSection === id ? "bg-cyan-500 text-slate-950" : "border border-white/10 bg-white/5 text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    <Icon className="text-xs" />{label}
-                  </button>
-                ))}
-              </div>
 
               {/* Admin Section Content */}
               <div className="min-w-0 flex-1 space-y-6">

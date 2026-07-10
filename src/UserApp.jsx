@@ -463,7 +463,7 @@ export default function UserApp() {
                       const childId = String(userId).replace("ps_", "");
                       const data = await fetchJson("/api/teacher/children/iep", {
                         method: "POST",
-                        headers: { ...authHeaders, "Content-Type": "application/json" },
+                        headers: { Authorization: `Bearer ${sessionToken}`, "Content-Type": "application/json" },
                         body: JSON.stringify({ childId: Number(childId), assessmentStatus, performanceLevel }),
                       });
                     } else {
@@ -474,7 +474,7 @@ export default function UserApp() {
                       });
                     }
                     const refreshed = await fetchJson("/api/teacher/overview", {
-                      headers: authHeaders,
+                      headers: { Authorization: `Bearer ${sessionToken}` },
                     });
                     setTeacherOverview(refreshed);
                   } catch (err) {
@@ -2982,11 +2982,17 @@ function getSubjectsForGrade(grade) {
 
 function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
   const [grade, setGrade] = useState("1");
-  const [topic, setTopic] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState({});
   const [matError, setMatError] = useState("");
   const [downloading, setDownloading] = useState(null);
+  const [subjectImages, setSubjectImages] = useState({});
+  const [generatingImages, setGeneratingImages] = useState(new Set());
+  const [imageSearchTopic, setImageSearchTopic] = useState("");
+  const [searchedImage, setSearchedImage] = useState(null);
+  const [openTeacherPanel, setOpenTeacherPanel] = useState(null);
+  const [teacherResults, setTeacherResults] = useState({});
+  const [topicGuides, setTopicGuides] = useState({});
 
   const subjects = getSubjectsForGrade(grade);
 
@@ -2997,47 +3003,37 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
     generateSubjects(grade);
   }, []);
 
+  const normalizeNoteText = (text) => {
+    if (!text || typeof text !== "string") return "";
+    return text
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/^#{1,6}\s*/gm, "")
+      .replace(/^\s*[-*+]\s+/gm, "• ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  };
+
   const generateSubjects = async (g) => {
     setGenerating(true);
     setMatError("");
     const subjs = getSubjectsForGrade(g);
-    const jsonPrompt = `Return ONLY a valid JSON object (no markdown, no backticks) where keys are subject names and values are 2-3 sentence descriptions of what Grade ${g} students learn in that subject according to the Kenyan CBC curriculum. Subjects: ${subjs.join(", ")}. Example format: {"English": "Students learn to read and write basic English sentences..."}`;
     try {
-      const res = await fetchJson("/api/ai/materials", {
-        method: "POST",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ grade: g, topic: jsonPrompt }),
-      });
-      const content = (res.content || "").trim();
-      let parsed = {};
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          const raw = JSON.parse(jsonMatch[0]);
-          parsed = raw;
-          const nestedKeys = ["Subject", "subjects", "Subjects", "subjects_list", "subjects_list"];
-          for (const k of nestedKeys) {
-            if (raw[k] && typeof raw[k] === "object" && !Array.isArray(raw[k])) {
-              const matchCount = subjs.filter((s) => raw[k][s]).length;
-              if (matchCount >= 2) { parsed = raw[k]; break; }
-            }
-          }
-        } catch {}
-      }
-      if (Object.keys(parsed).length === 0) {
-        const lines = content.split("\n").filter(Boolean);
-        subjs.forEach((subj) => {
-          const match = content.match(new RegExp(`\\*\\*${subj.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\*\\*[\\s\\S]*?(?=\\n\\*\\*|$)`));
-          if (match) parsed[subj] = match[0].replace(/\*\*/g, "").replace(subj, "").trim();
-        });
-        if (Object.keys(parsed).length === 0) {
-          subjs.forEach((subj, i) => { parsed[subj] = lines[i] || ""; });
-        }
-      }
-      const newGenerated = {};
-      subjs.forEach((subj) => {
-        newGenerated[subj] = parsed[subj] || `${subj} — Core subject in the Grade ${g} Kenyan CBC curriculum. Students develop foundational knowledge and practical skills.`;
-      });
+      const generatedEntries = await Promise.all(
+        subjs.map(async (subj) => {
+          const language = /kiswahili|swahili/i.test(subj) ? "kiswahili" : "english";
+          const prompt = `Create comprehensive Grade ${g} Kenyan CBC curriculum notes for ${subj}. Include a title, learning objectives, main concepts, activities, revision questions, and examples relevant to Kenya. Use ${language === "kiswahili" ? "Kiswahili" : "English"} only. Return plain text with clear sections and no markdown symbols.`;
+          const res = await fetchJson("/api/ai/materials", {
+            method: "POST",
+            headers: { ...authHeaders, "Content-Type": "application/json" },
+            body: JSON.stringify({ grade: g, prompt, subject: subj, language }),
+          });
+          const content = normalizeNoteText(String(res.content || "").trim());
+          return [subj, content || `${subj} — Core subject in the Grade ${g} Kenyan CBC curriculum. Students develop foundational knowledge and practical skills.`];
+        })
+      );
+      const newGenerated = Object.fromEntries(generatedEntries);
       setGenerated(newGenerated);
     } catch (err) {
       setMatError(err.message);
@@ -3046,36 +3042,86 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
     }
   };
 
-  const generateTopic = async (customTopic) => {
-    setGenerating(true);
-    setMatError("");
+  const generateSubjectImages = async (subjs, g) => {
+    setSubjectImages({});
+    setGeneratingImages(new Set(subjs));
+    for (const subject of subjs) {
+      try {
+        const res = await fetchJson("/api/ai/subject-image", {
+          method: "POST",
+          headers: { ...authHeaders, "Content-Type": "application/json" },
+          body: JSON.stringify({ subject, grade: g }),
+        });
+        if (res.url) {
+          setSubjectImages((prev) => ({ ...prev, [subject]: res.url }));
+        }
+      } catch {
+        // silently skip failed images
+      } finally {
+        setGeneratingImages((prev) => {
+          const next = new Set(prev);
+          next.delete(subject);
+          return next;
+        });
+      }
+    }
+  };
+
+  const generateSearchImage = async () => {
+    const topic = imageSearchTopic.trim();
+    if (!topic) return;
+    setSearchedImage({ topic, url: null, loading: true, error: "" });
     try {
-      const res = await fetchJson("/api/ai/materials", {
+      const res = await fetchJson("/api/ai/subject-image", {
         method: "POST",
         headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ grade: gradeRef.current, topic: customTopic }),
+        body: JSON.stringify({ subject: topic, grade }),
       });
-      const content = res.content || "";
-      setGenerated({ [customTopic]: content });
+      setSearchedImage({ topic, url: res.url || null, loading: false, error: res.error || "" });
     } catch (err) {
-      setMatError(err.message);
-    } finally {
-      setGenerating(false);
+      setSearchedImage({ topic, url: null, loading: false, error: err.message });
+    }
+  };
+
+  const fetchTeacherSuggest = async (subject) => {
+    setTeacherResults((prev) => ({ ...prev, [subject]: { loading: true, teacher: null, reason: "", error: "" } }));
+    try {
+      const res = await fetchJson("/api/ai/teacher-suggest", {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ subject, grade }),
+      });
+      setTeacherResults((prev) => ({ ...prev, [subject]: { loading: false, teacher: res.teacher, reason: res.reason, error: res.error || "" } }));
+    } catch (err) {
+      setTeacherResults((prev) => ({ ...prev, [subject]: { loading: false, teacher: null, reason: "", error: err.message } }));
+    }
+  };
+
+  const fetchTopicGuide = async (subject) => {
+    setTopicGuides((prev) => ({ ...prev, [subject]: { loading: true, guide: "", error: "" } }));
+    try {
+      const res = await fetchJson("/api/ai/topic-guide", {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ subject, grade }),
+      });
+      setTopicGuides((prev) => ({ ...prev, [subject]: { loading: false, guide: res.guide || "", error: res.error || "" } }));
+    } catch (err) {
+      setTopicGuides((prev) => ({ ...prev, [subject]: { loading: false, guide: "", error: err.message } }));
     }
   };
 
   const handleGradeChange = (g) => {
     setGrade(g);
-    setTopic("");
     setGenerated({});
+    setSubjectImages({});
+    setGeneratingImages(new Set());
+    setSearchedImage(null);
     setMatError("");
+    setOpenTeacherPanel(null);
+    setTeacherResults({});
+    setTopicGuides({});
     generateSubjects(g);
-  };
-
-  const handleCustomGenerate = (e) => {
-    e.preventDefault();
-    if (!topic.trim()) return;
-    generateTopic(topic.trim());
   };
 
   const downloadAs = async (format, subject, content) => {
@@ -3119,7 +3165,7 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
       <h3 className="mt-2 mb-2 text-2xl font-black text-white">Kenyan Curriculum Materials</h3>
       <p className="mb-6 text-sm text-slate-400">Select a grade to view subjects. Click any subject card to see learning content.</p>
 
-      <div className="flex flex-wrap gap-4 mb-6">
+      <div className="mb-6 flex flex-wrap items-end gap-3">
         <div className="w-full sm:w-48">
           <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Grade</label>
           <select
@@ -3132,23 +3178,52 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
             ))}
           </select>
         </div>
-        <form onSubmit={handleCustomGenerate} className="flex-1 flex items-end gap-2">
-          <div className="flex-1">
-            <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Custom topic</label>
+        <button
+          type="button"
+          onClick={() => generateSubjectImages(subjects, grade)}
+          className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300 transition hover:bg-cyan-400/20"
+        >
+          Generate Images
+        </button>
+        <div className="flex-1 min-w-[220px]">
+          <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Search image</label>
+          <div className="flex gap-2">
             <input
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="Type any topic to generate specific content..."
-              className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-400/60 placeholder-slate-600"
+              value={imageSearchTopic}
+              onChange={(e) => setImageSearchTopic(e.target.value)}
+              placeholder="Search any topic image"
+              className="flex-1 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-400/60 placeholder-slate-600"
             />
+            <button
+              type="button"
+              onClick={generateSearchImage}
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-300 transition hover:bg-white/10"
+            >
+              Search
+            </button>
           </div>
-          <ActionButton type="submit" disabled={generating || !topic.trim()} className="!px-5 !py-3 !text-sm whitespace-nowrap">
-            {generating ? "..." : "Generate"}
-          </ActionButton>
-        </form>
+        </div>
       </div>
 
       {matError && <p className="mb-4 text-sm text-rose-400">{matError}</p>}
+
+      {searchedImage && (
+        <div className="mb-6 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/60">
+          <div className="border-b border-white/10 px-4 py-3 text-xs font-black uppercase tracking-[0.22em] text-slate-400">
+            Search Result — {searchedImage.topic}
+          </div>
+          {searchedImage.loading ? (
+            <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-400">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+              Generating image...
+            </div>
+          ) : searchedImage.url ? (
+            <img src={searchedImage.url} alt={searchedImage.topic} className="w-full object-cover" style={{ maxHeight: 280 }} />
+          ) : (
+            <p className="px-4 py-4 text-sm text-rose-400">{searchedImage.error || "Could not generate image."}</p>
+          )}
+        </div>
+      )}
 
       {generating && (
         <div className="flex items-center gap-3 mb-6 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 px-5 py-4 text-sm text-cyan-200">
@@ -3177,7 +3252,20 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
               <div className="p-4">
                 {content ? (
                   <>
-                    <p className="text-sm text-slate-300 leading-6 line-clamp-4">{content}</p>
+                    <div className="line-clamp-4 whitespace-pre-wrap break-words font-['Times_New_Roman','Georgia',serif] text-[15px] leading-7 text-slate-200">
+                      {content}
+                    </div>
+                    {generatingImages.has(subject) && !subjectImages[subject] && (
+                      <div className="mt-3 flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-slate-900/50 py-6 text-xs text-slate-400">
+                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
+                        Generating illustration...
+                      </div>
+                    )}
+                    {subjectImages[subject] && (
+                      <div className="mt-3 overflow-hidden rounded-2xl border border-white/10">
+                        <img src={subjectImages[subject]} alt={`${subject} illustration`} className="w-full object-cover" style={{ aspectRatio: "16/9" }} />
+                      </div>
+                    )}
                     <div className="mt-3 flex gap-2">
                       <button
                         type="button"
@@ -3195,7 +3283,71 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
                       >
                         {downloading === subject ? "..." : "Word"}
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setOpenTeacherPanel(openTeacherPanel === subject ? null : subject)}
+                        className="flex-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300 transition hover:bg-cyan-400/20"
+                      >
+                        Teacher
+                      </button>
                     </div>
+
+                    {openTeacherPanel === subject && (
+                      <div className="mt-3 space-y-3 rounded-2xl border border-cyan-400/20 bg-slate-900/80 p-4">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400">Teaching Options — 20 KSH each</p>
+
+                        {/* Best Teacher */}
+                        <button
+                          type="button"
+                          onClick={() => fetchTeacherSuggest(subject)}
+                          disabled={teacherResults[subject]?.loading}
+                          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-left text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
+                        >
+                          {teacherResults[subject]?.loading ? "🔍 Finding best teacher…" : "🧑‍🏫 Find Best Teacher (20 KSH)"}
+                        </button>
+                        {teacherResults[subject]?.error && (
+                          <p className="text-xs text-rose-400">{teacherResults[subject].error}</p>
+                        )}
+                        {teacherResults[subject]?.teacher && (
+                          <div className="space-y-1 rounded-xl border border-green-400/20 bg-green-400/5 p-3 text-xs">
+                            <p className="font-bold text-white">{teacherResults[subject].teacher.name}</p>
+                            <p className="text-slate-400">{teacherResults[subject].reason}</p>
+                            {teacherResults[subject].teacher.specializations && (
+                              <p className="text-slate-500">Specializes in: {teacherResults[subject].teacher.specializations}</p>
+                            )}
+                            <a
+                              href={`https://wa.me/${String(teacherResults[subject].teacher.whatsapp || "").replace(/\D/g, "")}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-1 inline-block rounded-full border border-green-400/30 bg-green-400/10 px-3 py-1 text-green-300 transition hover:bg-green-400/20"
+                            >
+                              WhatsApp Teacher →
+                            </a>
+                          </div>
+                        )}
+                        {teacherResults[subject]?.teacher === null && teacherResults[subject]?.reason && !teacherResults[subject]?.loading && (
+                          <p className="text-xs text-slate-400">{teacherResults[subject].reason}</p>
+                        )}
+
+                        {/* AI Topic Guide */}
+                        <button
+                          type="button"
+                          onClick={() => fetchTopicGuide(subject)}
+                          disabled={topicGuides[subject]?.loading}
+                          className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-left text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
+                        >
+                          {topicGuides[subject]?.loading ? "🤖 Generating guide…" : "🤖 AI Topic-by-Topic Guide (20 KSH)"}
+                        </button>
+                        {topicGuides[subject]?.error && (
+                          <p className="text-xs text-rose-400">{topicGuides[subject].error}</p>
+                        )}
+                        {topicGuides[subject]?.guide && (
+                          <div className="max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/60 p-3 text-xs leading-6 text-slate-300 whitespace-pre-wrap">
+                            {topicGuides[subject].guide}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 ) : (
                   <p className="text-xs text-slate-500 italic">Waiting for content...</p>

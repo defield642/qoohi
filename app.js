@@ -95,6 +95,8 @@ const DEFAULT_SERVICE_CHARGES = [
   { serviceKey: "parent_registration", label: "Parent Registration", description: "Parent onboarding and account setup", chargeKsh: 0, active: 1, sortOrder: 10 },
   { serviceKey: "materials_download", label: "Materials Download", description: "AI-generated Kenyan curriculum materials (Grades 1-9)", chargeKsh: 4, active: 1, sortOrder: 11 },
   { serviceKey: "profile_update", label: "Profile Update", description: "Profile photo and details editing", chargeKsh: 0, active: 1, sortOrder: 12 },
+  { serviceKey: "teacher_suggest", label: "Teacher Suggestion", description: "AI matches the best teacher for your child's subject", chargeKsh: 20, active: 1, sortOrder: 13 },
+  { serviceKey: "ai_topic_teaching", label: "AI Topic Teaching", description: "AI guides your child topic-by-topic through a subject", chargeKsh: 20, active: 1, sortOrder: 14 },
 ];
 
 const DEFAULT_FINANCE_COLUMNS = [
@@ -190,7 +192,12 @@ app.use('*', async (c, next) => {
     GROQ_API_KEY: process.env.GROQ_API_KEY,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_MODEL: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+    OPENAI_IMAGE_MODEL: process.env.OPENAI_IMAGE_MODEL || "dall-e-3",
+    OPENAI_IMAGE_SIZE: process.env.OPENAI_IMAGE_SIZE || "1024x1024",
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+    GROK_API_KEY: process.env.GROK_API_KEY || process.env.XAI_API_KEY,
+    XAI_API_KEY: process.env.XAI_API_KEY || process.env.GROK_API_KEY,
+    GROK_MODEL: process.env.GROK_MODEL || process.env.XAI_MODEL || "grok-3-mini-fast",
     APP_URL: process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`,
   };
   await next();
@@ -451,24 +458,309 @@ app.post("/api/parent/children", async (c) => {
 
 // ── AI ──
 
+function getPreferredLanguage(subject, language) {
+  const normalized = String(language || subject || "").trim().toLowerCase();
+  if (["kiswahili", "swahili", "ki-swahili", "ki swahili"].includes(normalized)) return "kiswahili";
+  if (["english", "en", "eng"].includes(normalized)) return "english";
+  return /kiswahili|swahili/i.test(String(subject || "")) ? "kiswahili" : "english";
+}
+
+function normalizeMaterialsText(content) {
+  if (!content || typeof content !== "string") return "";
+  return content
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/\*(.*?)\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/^>\s?/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "• ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function buildFallbackMaterialsContent({ grade, subject, prompt, wantsKiswahili }) {
+  const topic = String(prompt || subject || (wantsKiswahili ? "Mada ya kujifunza" : "Learning topic")).trim();
+  const subjectName = String(subject || (wantsKiswahili ? "Mada" : "Subject")).trim();
+  const title = wantsKiswahili
+    ? `Darasa la ${grade} - ${subjectName}`
+    : `Grade ${grade} - ${subjectName}`;
+
+  if (wantsKiswahili) {
+    return [
+      title,
+      "",
+      `Mada: ${topic}`,
+      "",
+      "Malengo ya Kujifunza",
+      "1. Elewa dhana kuu za mada hii.",
+      "2. Tumia mifano ya maisha ya kila siku na mazingira ya Kenya.",
+      "3. Jitayarishe kwa mazoezi na maswali ya marudio.",
+      "",
+      "Dhana Muhimu",
+      "Mada hii imeandaliwa kwa kiwango cha darasa la " + grade + " kulingana na mtaala wa CBC wa Kenya.",
+      "",
+      "Shughuli",
+      "- Soma taarifa hii kwa makini.",
+      "- Andika mambo muhimu kwa maneno yako.",
+      "- Jibu maswali ya marudio na uliza swali kama unahitaji msaada.",
+      "",
+      "Maswali ya Marudio",
+      "1. Ni nini maana kuu ya mada hii?",
+      "2. Taja hatua mbili muhimu zinazohusiana na mada hii.",
+      "3. Eleza kwa kifupi jinsi unavyoweza kutumia kile ulichojifunza."
+    ].join("\n");
+  }
+
+  return [
+    title,
+    "",
+    `Topic: ${topic}`,
+    "",
+    "Learning Objectives",
+    "1. Understand the key ideas in this topic.",
+    "2. Apply the ideas to everyday examples in Kenya.",
+    "3. Prepare for revision through guided practice.",
+    "",
+    "Key Concepts",
+    `This material is prepared for Grade ${grade} according to the Kenyan CBC curriculum.`,
+    "",
+    "Activities",
+    "- Read the notes carefully.",
+    "- Write down the key points in your own words.",
+    "- Answer the revision questions and ask for help if needed.",
+    "",
+    "Revision Questions",
+    "1. What is the main idea of this topic?",
+    "2. Name two important points related to it.",
+    "3. Explain how you can use what you learned in daily life."
+  ].join("\n");
+}
+
 app.post("/api/ai/materials", async (c) => {
+  const session = await requireSession(c);
+  if (!session.ok) return session.response;
   const body = await c.req.json();
   const grade = String(body.grade || "").trim();
-  const topic = String(body.topic || "").trim();
-  if (!grade || !topic) return c.json({ error: "Grade and topic are required." }, 400);
-  const prompt = [
-    `Create comprehensive Kenyan CBC curriculum learning materials for Grade ${grade}.`,
-    `Topic: ${topic}.`,
-    "Include: Title, Learning Objectives (3-5 points), Key Concepts with explanations, Activities (2-3 exercises), Examples relevant to Kenya, Revision Questions (5 questions with answers).",
-    "Format it clearly with sections. Use simple language appropriate for the grade level.",
-    "Return plain text only, no markdown symbols."
-  ].join(" ");
-  const result = await getChatReply(c.env, [{ role: "user", content: prompt }], {
-    systemPrompt: "You are an expert Kenyan CBC curriculum teacher creating high-quality learning materials for parents and children.",
-    temperature: 0.6,
+  const promptInput = String(body.prompt || body.topic || "").trim();
+  const subject = String(body.subject || "").trim();
+  const language = String(body.language || "").trim().toLowerCase();
+  if (!grade || !promptInput) return c.json({ error: "Grade and topic or prompt are required." }, 400);
+
+  const wantsKiswahili = getPreferredLanguage(subject, language) === "kiswahili";
+  const isDirectPrompt = /(return only a valid json object|rudisha json halali|format it clearly|include:|example format:|tengeneza|orodhesha|majibu)/i.test(promptInput);
+
+  const prompt = isDirectPrompt
+    ? promptInput
+    : wantsKiswahili
+      ? [
+          `Tengeneza vifaa vya kujifunza vya kina vya mtaala wa CBC wa Kenya kwa Darasa la ${grade}.`,
+          `Mada: ${promptInput}.`,
+          "Jumuisha: Kichwa cha habari, Malengo ya Kujifunza (pointi 3-5), Dhana Muhimu na maelezo, Shughuli (mazoezi 2-3), Mifano inayohusiana na Kenya, Maswali ya Marudio (maswali 5 na majibu).",
+          "Panga kwa wazi kwa sehemu. Tumia lugha rahisi inayofaa kwa kiwango cha darasa.",
+          "Rudisha maandishi ya kawaida tu, bila alama za markdown."
+        ].join(" ")
+      : [
+          `Create comprehensive Kenyan CBC curriculum learning materials for Grade ${grade}.`,
+          `Topic: ${promptInput}.`,
+          "Include: Title, Learning Objectives (3-5 points), Key Concepts with explanations, Activities (2-3 exercises), Examples relevant to Kenya, Revision Questions (5 questions with answers).",
+          "Format it clearly with sections. Use simple language appropriate for the grade level.",
+          "Return plain text only, no markdown symbols."
+        ].join(" ");
+
+  const systemPrompt = wantsKiswahili
+    ? "Wewe ni mwalibu mtaalamu wa mtaala wa CBC wa Kenya unayeunda vifaa vya kujifunza vya ubora wa juu kwa wazazi na watoto kwa lugha ya Kiswahili."
+    : "You are an expert Kenyan CBC curriculum teacher creating high-quality learning materials for parents and children.";
+
+  const materialTitle = subject
+    ? wantsKiswahili
+      ? `Darasa la ${grade} - ${subject}`
+      : `Grade ${grade} - ${subject}`
+    : wantsKiswahili
+      ? `Darasa la ${grade} - Vifaa vya masomo`
+      : `Grade ${grade} - Curriculum Notes`;
+
+  const fallbackContent = buildFallbackMaterialsContent({ grade, subject, prompt: promptInput, wantsKiswahili });
+  const result = await requestGrokText(c.env, prompt, systemPrompt, 0.6);
+  if (!result.ok) {
+    const fallback = await requestChatCompletion(c.env, [{ role: "user", content: prompt }], {
+      systemPrompt,
+      temperature: 0.6,
+    });
+    if (!fallback) {
+      console.warn("Materials generation fallback used because no AI provider is configured.", result.error);
+      return c.json({ ok: true, title: materialTitle, content: fallbackContent });
+    }
+    const fallbackData = await fallback.response.json().catch(() => ({}));
+    const fallbackReply = fallbackData?.choices?.[0]?.message?.content?.trim();
+    if (!fallbackReply) {
+      console.warn("Materials generation fallback used because the AI provider returned an empty response.", result.error);
+      return c.json({ ok: true, title: materialTitle, content: fallbackContent });
+    }
+    return c.json({ ok: true, title: materialTitle, content: fallbackReply });
+  }
+
+  return c.json({ ok: true, title: materialTitle, content: result.reply });
+});
+
+// Generate educational illustration for a CBC subject
+app.post("/api/ai/subject-image", async (c) => {
+  const session = await requireSession(c);
+  if (!session.ok) return session.response;
+  const body = await c.req.json();
+  const subject = String(body.subject || "").trim();
+  const grade = String(body.grade || "").trim();
+  if (!subject || !grade) return c.json({ error: "Subject and grade are required." }, 400);
+
+  const env = c.env;
+  const prompt = `A vibrant, colorful educational illustration for a Grade ${grade} Kenyan CBC curriculum lesson on ${subject}. Child-friendly, African school setting, bright and cheerful colors, educational theme. No text, letters, or words in the image.`;
+
+  try {
+    if (env.GEMINI_API_KEY) {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/images:generate?key=${env.GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "gemini-image-preview",
+            prompt,
+            size: "512x512",
+            mimeType: "image/png",
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const err = await response.text().catch(() => "unknown error");
+        console.error("Gemini image generation error:", response.status, err);
+      } else {
+        const data = await response.json();
+        const url = data?.artifacts?.[0]?.imageUri || data?.candidates?.[0]?.imageUri || data?.imageUri || data?.data?.[0]?.url;
+        if (url) return c.json({ ok: true, url });
+      }
+    }
+
+    if (!env.OPENAI_API_KEY) {
+      return c.json({ error: "Image generation not configured." }, 503);
+    }
+
+    const openAiResult = await generateOpenAIImage(env, prompt);
+    if (!openAiResult.ok) return c.json({ error: openAiResult.error || "Image generation failed." }, 500);
+    return c.json({ ok: true, url: openAiResult.url });
+  } catch (err) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+// AI-matched teacher recommendation (charges parent 20 KSH, adds 10 KSH to teacher)
+app.post("/api/ai/teacher-suggest", async (c) => {
+  const session = await requireSession(c);
+  if (!session.ok) return session.response;
+  const body = await c.req.json();
+  const subject = String(body.subject || "").trim();
+  const grade = String(body.grade || "").trim();
+  if (!subject || !grade) return c.json({ error: "Subject and grade are required." }, 400);
+
+  // Charge parent 20 KSH
+  const chargeResult = await chargeUserForService(c.env, session.user.id, "teacher_suggest");
+  if (!chargeResult.ok) {
+    return c.json({ error: chargeResult.error, balance: chargeResult.balance, charge: chargeResult.charge }, 402);
+  }
+
+  // Fetch all teachers
+  const rows = await c.env.DB.prepare(
+    "SELECT id, full_name, email, whatsapp, specializations FROM users WHERE role = 'teacher' ORDER BY full_name ASC"
+  ).all();
+  const teachers = rows.results || [];
+
+  const isKiswahili = /kiswahili/i.test(subject);
+
+  if (teachers.length === 0) {
+    const noTeacherMsg = isKiswahili
+      ? "Hakuna mwalimu aliyesajiliwa bado."
+      : "No teachers are registered yet.";
+    return c.json({ ok: true, teacher: null, reason: noTeacherMsg, balance: chargeResult.balance, charge: chargeResult.charge });
+  }
+
+  // Ask AI to pick the best match
+  const teacherSummary = teachers.map((t, i) =>
+    `${i + 1}. ${t.full_name} — specializations: ${t.specializations || "General"}`
+  ).join("\n");
+
+  const pickPrompt = isKiswahili
+    ? `Mzazi anahitaji mwalimu bora kwa Darasa la ${grade} ${subject} (mtaala wa CBC wa Kenya).\n\nWalimu wanapatikana:\n${teacherSummary}\n\nRudisha JSON halali TU (bila markdown): { "teacherIndex": <nambari ya 1-based>, "reason": "<maelezo ya sentensi 2-3 kwa Kiswahili>" }`
+    : `A parent needs the best teacher for Grade ${grade} ${subject} (Kenyan CBC curriculum).\n\nAvailable teachers:\n${teacherSummary}\n\nReturn ONLY valid JSON (no markdown): { "teacherIndex": <1-based number>, "reason": "<2-3 sentence explanation>" }`;
+
+  const pickSystemPrompt = isKiswahili
+    ? "Wewe ni mshauri mtaalamu wa elimu. Linganisha walimu na wanafunzi kulingana na utaalamu wao. Jibu kwa Kiswahili."
+    : "You are an expert educational advisor. Match teachers to students based on specializations.";
+
+  const pickResult = await getChatReply(c.env, [{
+    role: "user",
+    content: pickPrompt,
+  }], { systemPrompt: pickSystemPrompt, temperature: 0.3 });
+
+  let recommended = teachers[0];
+  let reason = isKiswahili ? "Mwalimu bora anayepatikana kwa somo hili." : "Best available teacher for this subject.";
+  if (pickResult.ok) {
+    try {
+      const match = pickResult.reply.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        const idx = Number(parsed.teacherIndex || 1) - 1;
+        if (teachers[idx]) recommended = teachers[idx];
+        if (parsed.reason) reason = parsed.reason;
+      }
+    } catch { /* use defaults */ }
+  }
+
+  // Credit 10 KSH to the teacher's balance
+  await c.env.DB.prepare("UPDATE users SET balance = balance + 10 WHERE id = ?").bind(recommended.id).run();
+  await c.env.DB.prepare(
+    "INSERT INTO transactions (user_id, type, amount, description, status) VALUES (?, 'earning', 10, ?, 'completed')"
+  ).bind(recommended.id, `Teaching recommendation: Grade ${grade} ${subject}`).run();
+
+  return c.json({
+    ok: true,
+    teacher: { name: recommended.full_name, whatsapp: recommended.whatsapp, email: recommended.email, specializations: recommended.specializations },
+    reason,
+    balance: chargeResult.balance,
+    charge: chargeResult.charge,
   });
-  if (!result.ok) return c.json({ error: result.error }, 500);
-  return c.json({ ok: true, title: `Grade ${grade} - ${topic}`, content: result.reply });
+});
+
+// AI topic-by-topic learning guide (charges parent 20 KSH)
+app.post("/api/ai/topic-guide", async (c) => {
+  const session = await requireSession(c);
+  if (!session.ok) return session.response;
+  const body = await c.req.json();
+  const subject = String(body.subject || "").trim();
+  const grade = String(body.grade || "").trim();
+  if (!subject || !grade) return c.json({ error: "Subject and grade are required." }, 400);
+
+  const chargeResult = await chargeUserForService(c.env, session.user.id, "ai_topic_teaching");
+  if (!chargeResult.ok) {
+    return c.json({ error: chargeResult.error, balance: chargeResult.balance, charge: chargeResult.charge }, 402);
+  }
+
+  const isKiswahili = /kiswahili/i.test(subject);
+  const guideContent = isKiswahili
+    ? `Tengeneza mwongozo wazi wa mada kwa mada kwa Darasa la ${grade} ${subject} katika mtaala wa CBC wa Kenya. Orodhesha mada 6-8 katika mpangilio unaopendekezwa wa kujifunza. Kwa kila mada toa: jina la mada, sentensi moja kuhusu mtoto atakachojifunza, na shughuli moja rahisi ya vitendo. Tumia lugha ya kutia moyo inayofaa kwa mtoto wa Darasa la ${grade}. Panga kama orodha yenye nambari.`
+    : `Create a clear topic-by-topic learning guide for Grade ${grade} ${subject} in the Kenyan CBC curriculum. List 6-8 topics in the recommended learning order. For each topic provide: topic name, one sentence on what the child will learn, and one simple hands-on activity. Use encouraging language suitable for a Grade ${grade} child. Format as a numbered list.`;
+
+  const guideSystemPrompt = isKiswahili
+    ? "Wewe ni mwalimu wa CBC wa Kenya mwenye joto na wa kutia moyo, unayeongoza watoto hatua kwa hatua kwa lugha ya Kiswahili."
+    : "You are a warm, encouraging Kenyan CBC curriculum teacher guiding children step by step.";
+
+  const result = await getChatReply(c.env, [{
+    role: "user",
+    content: guideContent,
+  }], { systemPrompt: guideSystemPrompt, temperature: 0.5 });
+
+  if (!result.ok) return c.json({ error: result.error, balance: chargeResult.balance }, 500);
+  return c.json({ ok: true, guide: result.reply, balance: chargeResult.balance, charge: chargeResult.charge });
 });
 
 // Materials download with balance charge
@@ -1485,6 +1777,148 @@ function normalizeChatMessages(messages, defaultSystemPrompt) {
   return normalized;
 }
 
+async function requestGrokText(env, prompt, systemPrompt = "", temperature = 0.6) {
+  const apiKey = env.GROK_API_KEY || env.XAI_API_KEY;
+  if (!apiKey) return { ok: false, error: "Grok is not configured." };
+
+  try {
+    const response = await fetch("https://api.x.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: env.GROK_MODEL || env.XAI_MODEL || "grok-3-mini-fast",
+        messages: [
+          ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
+          { role: "user", content: prompt },
+        ],
+        temperature,
+        max_tokens: 8192,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      return { ok: false, error: `Grok request failed: ${response.status} ${errText}` };
+    }
+
+    const data = await response.json();
+    const reply = data?.choices?.[0]?.message?.content?.trim();
+    if (!reply) return { ok: false, error: "Grok returned an empty response." };
+    return { ok: true, reply };
+  } catch (error) {
+    return { ok: false, error: error.message || "Grok request failed." };
+  }
+}
+
+async function requestGeminiText(env, prompt, systemPrompt = "", temperature = 0.6) {
+  if (!env.GEMINI_API_KEY) return { ok: false, error: "Gemini is not configured." };
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${env.GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: `${systemPrompt ? `${systemPrompt}\n\n` : ""}${prompt}` }] }],
+          generationConfig: { temperature, maxOutputTokens: 8192 },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      return { ok: false, error: `Gemini request failed: ${response.status} ${errText}` };
+    }
+
+    const data = await response.json();
+    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!reply) return { ok: false, error: "Gemini returned an empty response." };
+    return { ok: true, reply };
+  } catch (error) {
+    return { ok: false, error: error.message || "Gemini request failed." };
+  }
+}
+
+async function generateGeminiImage(env, prompt) {
+  if (!env.GEMINI_API_KEY) return { ok: false, error: "Gemini image generation is not configured." };
+
+  const endpoints = [
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${env.GEMINI_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${env.GEMINI_API_KEY}`,
+  ];
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        console.error("Gemini image generation error:", response.status, errText);
+        continue;
+      }
+
+      const data = await response.json();
+      const inlineImage = data?.candidates?.[0]?.content?.parts?.find((part) => part.inlineData?.data)?.inlineData;
+      if (inlineImage?.data) {
+        return { ok: true, url: `data:${inlineImage.mimeType || "image/png"};base64,${inlineImage.data}` };
+      }
+    } catch (error) {
+      console.error("Gemini image generation exception:", error);
+    }
+  }
+
+  return { ok: false, error: "Gemini image generation failed." };
+}
+
+async function generateOpenAIImage(env, prompt) {
+  if (!env.OPENAI_API_KEY) return { ok: false, error: "OpenAI image generation is not configured." };
+
+  const models = [env.OPENAI_IMAGE_MODEL || "dall-e-3", "dall-e-2"];
+  const size = env.OPENAI_IMAGE_SIZE || "1024x1024";
+
+  for (const model of models) {
+    try {
+      const body = { model, prompt, n: 1, size };
+
+      const response = await fetch("https://api.openai.com/v1/images/generations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const err = await response.text().catch(() => "unknown error");
+        console.error(`OpenAI image generation error (${model}):`, response.status, err);
+        continue;
+      }
+
+      const data = await response.json();
+      const imageData = data?.data?.[0];
+      if (imageData?.url) {
+        return { ok: true, url: imageData.url };
+      }
+    } catch (error) {
+      console.error(`OpenAI image generation exception (${model}):`, error);
+    }
+  }
+
+  return { ok: false, error: "OpenAI image generation failed." };
+}
+
 async function requestChatCompletion(env, messages, { systemPrompt, temperature = 0.7, stream = false } = {}) {
   const finalMessages = normalizeChatMessages(messages, systemPrompt);
   const body = { messages: finalMessages, temperature };
@@ -1492,17 +1926,17 @@ async function requestChatCompletion(env, messages, { systemPrompt, temperature 
 
   const providers = [];
 
-  if (env.OPENAI_API_KEY) {
+  if (env.GROK_API_KEY || env.XAI_API_KEY) {
     providers.push(async () => {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      const response = await fetch("https://api.x.ai/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.OPENAI_API_KEY}` },
-        body: JSON.stringify({ model: env.OPENAI_MODEL || "gpt-4.1-mini", ...body }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.GROK_API_KEY || env.XAI_API_KEY}` },
+        body: JSON.stringify({ model: env.GROK_MODEL || env.XAI_MODEL || "grok-3-mini-fast", ...body }),
       });
       const data = await response.clone().json().catch(() => ({}));
       const reply = data?.choices?.[0]?.message?.content?.trim();
       if (!response.ok || !reply) return null;
-      return { provider: "openai", response };
+      return { provider: "grok", response };
     });
   }
 
@@ -1520,9 +1954,23 @@ async function requestChatCompletion(env, messages, { systemPrompt, temperature 
     });
   }
 
+  if (env.OPENAI_API_KEY) {
+    providers.push(async () => {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.OPENAI_API_KEY}` },
+        body: JSON.stringify({ model: env.OPENAI_MODEL || "gpt-4.1-mini", ...body }),
+      });
+      const data = await response.clone().json().catch(() => ({}));
+      const reply = data?.choices?.[0]?.message?.content?.trim();
+      if (!response.ok || !reply) return null;
+      return { provider: "openai", response };
+    });
+  }
+
   if (env.GEMINI_API_KEY) {
     providers.push(async () => {
-      const geminiMessages = finalMessages.map(m => ({
+      const geminiMessages = finalMessages.map((m) => ({
         role: m.role === "assistant" ? "model" : m.role,
         parts: [{ text: m.content }],
       }));
@@ -1531,7 +1979,7 @@ async function requestChatCompletion(env, messages, { systemPrompt, temperature 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: geminiMessages,
-          generationConfig: { temperature: body.temperature || 0.7, maxOutputTokens: 8192 },
+          generationConfig: { temperature: body.temperature ?? 0.7, maxOutputTokens: 8192 },
         }),
       });
       if (!geminiRes.ok) {
@@ -1562,16 +2010,18 @@ async function requestChatCompletion(env, messages, { systemPrompt, temperature 
 
 async function getChatReply(env, messages, options = {}) {
   const result = await requestChatCompletion(env, messages, options);
-  if (!result) return { ok: false, error: "All AI providers failed to return a response. Check API keys." };
+  if (!result) return { ok: false, error: "No AI provider available." };
+
   const data = await result.response.json().catch(() => ({}));
   const reply = data?.choices?.[0]?.message?.content?.trim();
   if (!reply) return { ok: false, error: "AI returned an empty response." };
+
   return { ok: true, reply, provider: result.provider };
 }
 
 async function generateResumeText(env, resumeData) {
   const prompt = buildResumePrompt(resumeData);
-  if (!env.OPENAI_API_KEY && !env.GROQ_API_KEY && !env.GEMINI_API_KEY) return buildFallbackResume(resumeData);
+  if (!env.OPENAI_API_KEY && !env.GROQ_API_KEY && !env.GEMINI_API_KEY && !env.GROK_API_KEY && !env.XAI_API_KEY) return buildFallbackResume(resumeData);
   const result = await getChatReply(env, [{ role: "system", content: "You write polished professional resumes. Improve wording, structure, and bullet quality while staying truthful to the candidate details. Return plain text only." }, { role: "user", content: prompt }], { temperature: 0.7 });
   if (!result.ok) return buildFallbackResume(resumeData);
   return result.reply;
