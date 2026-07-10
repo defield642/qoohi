@@ -2090,10 +2090,10 @@ function buildAdminEmailLines(name, message, pdfLinks) {
 }
 
 async function sendMail(env, { to, subject, bodyLines }) {
+  const fullBody = bodyLines.join('\n');
+
   if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS || !env.SMTP_FROM) {
-    const code = bodyLines.find(l => /\d{6}/.test(l))?.match(/\d{6}/)?.[0] || 'N/A';
-    console.log(`[Email] SMTP not configured. Verification code: ${code}`);
-    console.log(`[Email] Would send to ${to}: ${subject}`);
+    console.log(`[Email] SMTP not configured. Would send to ${to}:\nSubject: ${subject}\n${fullBody}\n---`);
     return;
   }
 
@@ -2103,9 +2103,9 @@ async function sendMail(env, { to, subject, bodyLines }) {
     port,
     secure: port === 465,
     family: 4,
-    connectionTimeout: 8000,
-    greetingTimeout: 8000,
-    socketTimeout: 8000,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 15000,
     auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
   });
 
@@ -2114,13 +2114,11 @@ async function sendMail(env, { to, subject, bodyLines }) {
       from: `"QOOHI" <${env.SMTP_FROM}>`,
       to,
       subject,
-      text: bodyLines.join('\n'),
+      text: fullBody,
     });
     console.log(`[Email] Sent to ${to}: ${subject}`);
   } catch (error) {
-    const code = bodyLines.find(l => /\d{6}/.test(l))?.match(/\d{6}/)?.[0] || 'N/A';
-    console.error(`[Email] Failed to send to ${to}. Code: ${code}. Error: ${error.message}`);
-    console.log(`[Email] Fallback - code ${code} is logged for user ${to}`);
+    console.log(`[Email] FAILED to ${to} (${error.message}). Full email for logs:\nSubject: ${subject}\n${fullBody}\n---`);
   }
 }
 
