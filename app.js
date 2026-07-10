@@ -2054,15 +2054,38 @@ async function sendMail(env, { to, subject, bodyLines }) {
     console.log("SMTP Config missing, skipping email. OTP:", bodyLines[2] || bodyLines[0]);
     return;
   }
+
   const transporter = nodemailer.createTransport({
     host: env.SMTP_HOST,
     port: Number(env.SMTP_PORT),
-    secure: env.SMTP_PORT === '465' || env.SMTP_PORT === 465,
-    auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+    secure: Number(env.SMTP_PORT) === 465,
+
+    // Fix Render IPv6 SMTP connection issue
+    family: 4,
+
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+
+    auth: {
+      user: env.SMTP_USER,
+      pass: env.SMTP_PASS,
+    },
   });
+
   try {
-    await transporter.sendMail({ from: `"QOOHI" <${env.SMTP_FROM}>`, to, subject, text: bodyLines.join('\n') });
-  } catch (error) { console.error("Failed to send email:", error); }
+    await transporter.sendMail({
+      from: `"QOOHI" <${env.SMTP_FROM}>`,
+      to,
+      subject,
+      text: bodyLines.join('\n'),
+    });
+
+    console.log("Email sent successfully to:", to);
+
+  } catch (error) {
+    console.error("Failed to send email:", error);
+  }
 }
 
 // Serve admin and caleb pages
