@@ -7,9 +7,11 @@ import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
+import dns from 'dns';
 import { fileURLToPath } from 'url';
 
 dotenv.config();
+dns.setDefaultResultOrder('ipv4first');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,9 +19,38 @@ const __dirname = path.dirname(__filename);
 const dbPath = process.env.DATABASE_PATH || './qoohi.db';
 const db = new Database(dbPath);
 
-// Initialize database
-const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
-db.exec(schema);
+db.pragma('journal_mode = WAL');
+db.pragma('synchronous = NORMAL');
+db.pragma('cache_size = -16000');
+db.pragma('temp_store = MEMORY');
+db.pragma('busy_timeout = 5000');
+db.pragma('mmap_size = 30000000000');
+
+const cache = { serviceCharges: { data: null, expiry: 0 }, ttl: 30000 };
+
+function getCachedServiceCharges() {
+  if (cache.serviceCharges.data && Date.now() < cache.serviceCharges.expiry) {
+    return cache.serviceCharges.data;
+  }
+  return null;
+}
+
+function setCachedServiceCharges(data) {
+  cache.serviceCharges.data = data;
+  cache.serviceCharges.expiry = Date.now() + cache.ttl;
+}
+
+function invalidateServiceChargesCache() {
+  cache.serviceCharges.data = null;
+  cache.serviceCharges.expiry = 0;
+}
+
+// Initialize database (skip if already initialized)
+const hasUsers = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
+if (!hasUsers) {
+  const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
+  db.exec(schema);
+}
 
 // SELF-SEEDING: Ensure test accounts exist
 const testUsers = [
@@ -112,6 +143,11 @@ try { db.exec("ALTER TABLE users ADD COLUMN specializations TEXT NOT NULL DEFAUL
 
 // Add mpesa_message column to deposits for raw M-Pesa message storage
 try { db.exec("ALTER TABLE deposits ADD COLUMN mpesa_message TEXT"); } catch { /* ok */ }
+
+// Performance indexes
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)"); } catch { /* ok */ }
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_auth_codes_lookup ON auth_codes(email, code, purpose)"); } catch { /* ok */ }
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)"); } catch { /* ok */ }
 
 for (const service of DEFAULT_SERVICE_CHARGES) {
   db.prepare(
@@ -1080,6 +1116,7 @@ app.post("/api/admin/service-charges/:key", async (c) => {
      VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(service_key) DO UPDATE SET label=excluded.label, description=excluded.description, charge_ksh=excluded.charge_ksh, active=excluded.active, sort_order=excluded.sort_order, updated_at=excluded.updated_at`
   ).bind(serviceKey, label, description, chargeKsh, active, sortOrder, new Date().toISOString()).run();
+  invalidateServiceChargesCache();
   return c.json({ ok: true, serviceCharges: await getServiceCharges(c.env) });
 });
 
@@ -1434,7 +1471,6 @@ app.get("/api/finance/analytics", async (c) => {
   };
 
   const selectedDate = c.req.query("date") || fmt(new Date());
-  const today = new Date();
 
   // Parse the selected date
   const [sy, sm, sd] = selectedDate.split("-").map(Number);
@@ -1698,8 +1734,12 @@ async function getOptionalSession(c) {
 }
 
 async function getServiceCharges(env) {
+  const cached = getCachedServiceCharges();
+  if (cached) return cached;
   const rows = await env.DB.prepare("SELECT service_key, label, description, charge_ksh, active, sort_order, updated_at FROM service_charges ORDER BY sort_order ASC, label ASC").all();
-  return rows.results || [];
+  const data = rows.results || [];
+  setCachedServiceCharges(data);
+  return data;
 }
 
 async function getServiceCharge(env, serviceKey) {
@@ -2051,26 +2091,22 @@ function buildAdminEmailLines(name, message, pdfLinks) {
 
 async function sendMail(env, { to, subject, bodyLines }) {
   if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS || !env.SMTP_FROM) {
-    console.log("SMTP Config missing, skipping email. OTP:", bodyLines[2] || bodyLines[0]);
+    const code = bodyLines.find(l => /\d{6}/.test(l))?.match(/\d{6}/)?.[0] || 'N/A';
+    console.log(`[Email] SMTP not configured. Verification code: ${code}`);
+    console.log(`[Email] Would send to ${to}: ${subject}`);
     return;
   }
 
+  const port = Number(env.SMTP_PORT) || 465;
   const transporter = nodemailer.createTransport({
     host: env.SMTP_HOST,
-    port: Number(env.SMTP_PORT),
-    secure: Number(env.SMTP_PORT) === 465,
-
-    // Fix Render IPv6 SMTP connection issue
+    port,
+    secure: port === 465,
     family: 4,
-
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-
-    auth: {
-      user: env.SMTP_USER,
-      pass: env.SMTP_PASS,
-    },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 8000,
+    auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
   });
 
   try {
@@ -2080,11 +2116,11 @@ async function sendMail(env, { to, subject, bodyLines }) {
       subject,
       text: bodyLines.join('\n'),
     });
-
-    console.log("Email sent successfully to:", to);
-
+    console.log(`[Email] Sent to ${to}: ${subject}`);
   } catch (error) {
-    console.error("Failed to send email:", error);
+    const code = bodyLines.find(l => /\d{6}/.test(l))?.match(/\d{6}/)?.[0] || 'N/A';
+    console.error(`[Email] Failed to send to ${to}. Code: ${code}. Error: ${error.message}`);
+    console.log(`[Email] Fallback - code ${code} is logged for user ${to}`);
   }
 }
 
