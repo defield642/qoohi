@@ -26,43 +26,32 @@ import {
   FaUsers,
   FaWallet,
   FaWhatsapp,
+  FaGoogle,
 } from "react-icons/fa";
 import QoohiLogo from "./assets/qoohiLogo.jpeg";
-import bg1 from "./background/pexels-enginakyurt-1435752.jpg";
-import bg2 from "./background/pexels-francesco-ungaro-673648.jpg";
-import bg3 from "./background/pexels-pixabay-268533.jpg";
-import bg4 from "./background/pexels-pixabay-356056.jpg";
-import bg5 from "./background/pexels-pixabay-531880.jpg";
-import bg6 from "./background/pexels-veeterzy-303383.jpg";
-import fc26Img from "./games/fc26.jpeg";
-import codImg from "./games/cod.jpeg";
-import gtaImg from "./games/gta.jpeg";
-import websiteImg from "./Tech/WEBSITE & SOFTWARE.webp";
-import aiTechImg from "./Tech/AI TECH.webp";
-import iepImg from "./home/iep.jpeg";
-import learnImg from "./home/learn.jpeg";
-import libraryImg from "./home/library.jpeg";
-import loginImg from "./home/login.webp";
-import qoohiAiImg from "./home/qoohi ai.jpeg";
-import teacherImg from "./home/teacher.jpeg";
+const bg1 = QoohiLogo;
+const bg2 = QoohiLogo;
+const bg3 = QoohiLogo;
+const bg4 = QoohiLogo;
+const bg5 = QoohiLogo;
+const bg6 = QoohiLogo;
+const fc26Img = QoohiLogo;
+const codImg = QoohiLogo;
+const gtaImg = QoohiLogo;
+const websiteImg = QoohiLogo;
+const aiTechImg = QoohiLogo;
+const iepImg = QoohiLogo;
+const libraryImg = QoohiLogo;
+const loginImg = QoohiLogo;
+const qoohiAiImg = QoohiLogo;
+const teacherImg = QoohiLogo;
 
 const MotionDiv = motion.div;
 
-const API_BASE = import.meta.env.VITE_API_BASE || "";
+const API_BASE = import.meta.env.DEV ? "" : (import.meta.env.VITE_API_BASE || "");
+const MPESA_API_BASE = import.meta.env.VITE_MPESA_API_BASE || "http://localhost:8080";
 
 const backgrounds = [bg1, bg2, bg3, bg4, bg5, bg6];
-const navItems = [
-  { id: "home", label: "Home", img: fc26Img },
-  { id: "iep", label: "Learner IEP", img: iepImg },
-  { id: "teachers", label: "Teachers", img: teacherImg },
-  { id: "resources", label: "Resources", img: libraryImg },
-  { id: "learn", label: "Learn", img: learnImg },
-  { id: "games", label: "Games", img: gtaImg },
-  { id: "new", label: "New on QOOHI", img: fc26Img },
-  { id: "qoohiai", label: "QOOHI AI", img: qoohiAiImg },
-  { id: "about", label: "About", img: loginImg },
-  { id: "contact", label: "Contact", img: teacherImg },
-];
 const packageCards = [
   {
     key: "computer_packages",
@@ -106,7 +95,7 @@ const packageCards = [
       "Vibe Coding",
     ],
     icon: FaGraduationCap,
-    image: learnImg,
+    image: aiTechImg,
   },
 ];
 const tournamentInfo = {
@@ -117,123 +106,9 @@ const tournamentInfo = {
   secondPrizeKsh: 300,
 };
 
-// Global set to prevent garbage collection of utterances (crucial for Chrome/Linux)
-const activeUtterances = new Set();
-
-const FEMALE_VOICE_KEYWORDS = [
-  "female", "samantha", "karen", "moira", "tessa", "fiona", "veena",
-  "zira", "hazel", "catherine", "alice", "microsoft heather",
-  "google uk english female", "google us english female",
-  "google français female", "google deutsch female",
-];
-
-function pickFemaleVoice(voices) {
-  if (!voices || voices.length === 0) return null;
-  const lower = voices.map((v) => ({ voice: v, name: v.name.toLowerCase() }));
-  const byKeyword = lower.find((v) =>
-    FEMALE_VOICE_KEYWORDS.some((kw) => v.name.includes(kw))
-  );
-  if (byKeyword) return byKeyword.voice;
-  const byLang = lower.find((v) => v.name.includes("united states") || v.lang?.startsWith("en"));
-  if (byLang) return byLang.voice;
-  return voices[0];
-}
-
-function useVoiceGuide(voiceScript) {
-  const [voiceEnabled, setVoiceEnabled] = useState(() => {
-    return localStorage.getItem("qoohi_voice_enabled") !== "false";
-  });
-  const [isSpeaking, setIsSpeaking] = useState(false);
-
-  const synth = typeof window !== "undefined" ? window.speechSynthesis : null;
-
-  const speak = useCallback((force = false) => {
-    if (!synth || !voiceScript || (!voiceEnabled && !force)) return;
-
-    try {
-      synth.cancel();
-      
-      const utterance = new SpeechSynthesisUtterance();
-      utterance.text = voiceScript;
-      utterance.lang = "en-US";
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
-
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        activeUtterances.delete(utterance);
-      };
-      utterance.onerror = (e) => {
-        console.error("Speech error:", e);
-        setIsSpeaking(false);
-        activeUtterances.delete(utterance);
-      };
-
-      activeUtterances.add(utterance);
-
-      const voices = synth.getVoices();
-      const female = pickFemaleVoice(voices);
-      if (female) utterance.voice = female;
-
-      synth.speak(utterance);
-    } catch (err) {
-      console.error("Synthesis failed", err);
-    }
-  }, [synth, voiceScript, voiceEnabled]);
-
-  useEffect(() => {
-    if (!voiceEnabled || !voiceScript || !synth) return;
-
-    const t = setTimeout(() => {
-      if (!synth.speaking) speak();
-    }, 1000);
-
-    return () => {
-      clearTimeout(t);
-      synth.cancel();
-    };
-  }, [voiceScript, voiceEnabled, synth, speak]);
-
-  const toggleVoice = () => {
-    const newState = !voiceEnabled;
-    setVoiceEnabled(newState);
-    localStorage.setItem("qoohi_voice_enabled", newState.toString());
-    if (newState) {
-      // Small delay to ensure state update has propagated if needed
-      setTimeout(() => speak(true), 50);
-    } else {
-      synth?.cancel();
-      setIsSpeaking(false);
-    }
-  };
-
-  return { voiceEnabled, toggleVoice, isSpeaking };
-}
-
 export default function UserApp() {
   const [route, setRoute] = useState(getRouteFromHash());
   // ... (rest of state)
-
-  // 🔓 AUDIO UNBLOCKER
-  useEffect(() => {
-    const unlock = () => {
-      if (window.speechSynthesis) {
-        const silent = new SpeechSynthesisUtterance("");
-        silent.volume = 0;
-        window.speechSynthesis.speak(silent);
-        window.removeEventListener("click", unlock);
-        window.removeEventListener("keydown", unlock);
-      }
-    };
-    window.addEventListener("click", unlock);
-    window.addEventListener("keydown", unlock);
-    return () => {
-      window.removeEventListener("click", unlock);
-      window.removeEventListener("keydown", unlock);
-    };
-  }, []);
 
  
   
@@ -250,9 +125,36 @@ export default function UserApp() {
     localStorage.getItem("qoohi_session_token") || "",
   );
   const [dashboard, setDashboard] = useState(null);
+  const [chatWith, setChatWith] = useState(null);
+  const [chatWithName, setChatWithName] = useState("");
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatOpen, setChatOpen] = useState(false);
+  const [unreadNotifs, setUnreadNotifs] = useState([]);
   const [teacherOverview, setTeacherOverview] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
   const [loadingDashboard, setLoadingDashboard] = useState(false);
+  const [oauthChoiceRequired, setOauthChoiceRequired] = useState(false);
+  const [availableDashboards, setAvailableDashboards] = useState([]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthToken = params.get("oauth_token");
+    if (params.get("oauth_select") === "1") setOauthChoiceRequired(true);
+    const hashQuery = window.location.hash.includes("?")
+      ? new URLSearchParams(window.location.hash.split("?")[1])
+      : null;
+    const oauthError = params.get("oauth_error") || hashQuery?.get("oauth_error");
+    if (oauthToken) {
+      localStorage.setItem("qoohi_session_token", oauthToken);
+      setSessionToken(oauthToken);
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+    }
+    if (oauthError) {
+      setStatusMessage(`Google sign-in failed: ${oauthError}`);
+      window.history.replaceState({}, document.title, `${window.location.pathname}#login`);
+    }
+  }, []);
 
   useEffect(() => {
     if (!dashboard || dashboard.student?.role !== "teacher") {
@@ -286,7 +188,10 @@ export default function UserApp() {
     fetchJson("/api/student/dashboard", {
       headers: { Authorization: `Bearer ${sessionToken}` },
     })
-      .then((data) => setDashboard(data.dashboard))
+      .then((data) => {
+        setDashboard(data.dashboard);
+        setAvailableDashboards(data.dashboard?.availableDashboards || []);
+      })
       .catch(() => {
         setDashboard(null);
         localStorage.removeItem("qoohi_session_token");
@@ -301,8 +206,20 @@ export default function UserApp() {
       headers: { Authorization: `Bearer ${sessionToken}` },
     });
     setDashboard(data.dashboard);
+    setAvailableDashboards(data.dashboard?.availableDashboards || []);
     return data.dashboard;
   }, [sessionToken]);
+
+  const switchDashboard = async (role) => {
+    if (!sessionToken || !["parent", "teacher"].includes(role)) return;
+    setLoadingDashboard(true);
+    try {
+      const data = await fetchJson(`/api/student/dashboard?role=${encodeURIComponent(role)}`, { headers: { Authorization: `Bearer ${sessionToken}` } });
+      setDashboard(data.dashboard);
+      setAvailableDashboards(data.dashboard?.availableDashboards || []);
+      setOauthChoiceRequired(false);
+    } finally { setLoadingDashboard(false); }
+  };
 
   const goTo = (nextRoute) => {
     window.location.hash = nextRoute === "home" ? "" : nextRoute;
@@ -367,15 +284,50 @@ export default function UserApp() {
     goTo("home");
   };
 
+  const chatHeaders = { Authorization: `Bearer ${sessionToken}`, "Content-Type": "application/json" };
+  const myUserId = dashboard?.student?.id;
+
+  const openChat = async (userId, userName) => {
+    setChatWith(userId);
+    setChatWithName(userName);
+    setChatOpen(true);
+    setChatInput("");
+    try {
+      const res = await fetchJson(`/api/chat/messages?with=${userId}`, { headers: chatHeaders });
+      setChatMessages(res.messages || []);
+    } catch { setChatMessages([]); }
+  };
+
+  const sendChatMessage = async () => {
+    if (!chatInput.trim() || !chatWith) return;
+    const msg = chatInput.trim();
+    setChatInput("");
+    setChatMessages((prev) => [...prev, { from_user_id: myUserId, message: msg, created_at: new Date().toISOString(), from_name: dashboard?.student?.fullName || "" }]);
+    try {
+      await fetchJson("/api/chat/send", {
+        method: "POST", headers: chatHeaders,
+        body: JSON.stringify({ toUserId: chatWith, message: msg }),
+      });
+    } catch {}
+  };
+
+  const fetchUnreadNotifs = async () => {
+    try {
+      const res = await fetchJson("/api/chat/unread", { headers: chatHeaders });
+      setUnreadNotifs(res.notifications || []);
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (!sessionToken) return;
+    fetchUnreadNotifs();
+    const interval = setInterval(fetchUnreadNotifs, 8000);
+    return () => clearInterval(interval);
+  }, [sessionToken]);
+
   return (
     <div
-      className="min-h-screen bg-slate-950 text-white"
-      style={{
-        backgroundImage: `linear-gradient(145deg, rgba(3,7,18,0.92), rgba(15,23,42,0.86)), url(${backgroundImage})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundAttachment: "fixed",
-      }}
+      className="app-light min-h-screen bg-slate-100 text-slate-900"
     >
       <Header route={route} goTo={goTo} dashboard={dashboard} />
       <main className="mx-auto min-h-screen max-w-7xl px-4 pb-32 pt-4 sm:px-6 lg:px-8">
@@ -406,23 +358,62 @@ export default function UserApp() {
             }}
           >
             {route === "home" && (
-              <HomePage
+              sessionToken ? (oauthChoiceRequired && availableDashboards.length > 1 ? <DashboardChooser dashboards={availableDashboards} onSelect={switchDashboard} /> : <DashboardPage
                 dashboard={dashboard}
+                teacherOverview={teacherOverview}
+                sessionToken={sessionToken}
                 goTo={goTo}
+                openParentRegistration={openParentRegistration}
+                onRefresh={refreshDashboard}
+                availableDashboards={availableDashboards}
+                onSwitchDashboard={switchDashboard}
+                onUpdateIep={async (userId, assessmentStatus, performanceLevel) => {
+                  try {
+                    const isParentStudent = String(userId).startsWith("ps_");
+                    if (isParentStudent) {
+                      const childId = String(userId).replace("ps_", "");
+                      await fetchJson("/api/teacher/children/iep", {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${sessionToken}`, "Content-Type": "application/json" },
+                        body: JSON.stringify({ childId: Number(childId), assessmentStatus, performanceLevel }),
+                      });
+                    } else {
+                      await fetchJson(`/api/admin/users/${userId}/iep`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${sessionToken}` },
+                        body: JSON.stringify({ assessmentStatus, performanceLevel }),
+                      });
+                    }
+                    const refreshed = await fetchJson("/api/teacher/overview", {
+                      headers: { Authorization: `Bearer ${sessionToken}` },
+                    });
+                    setTeacherOverview(refreshed);
+                  } catch (err) {
+                    setStatusMessage(err.message);
+                  }
+                }}
+                loading={loadingDashboard}
+                logout={logout}
+                unreadNotifs={unreadNotifs}
+                openChat={openChat}
+              />) : <LoginPage
+                statusMessage={statusMessage}
+                onSubmit={(payload) =>
+                  handleCodeRequest({ ...payload, mode: "login" })
+                }
+                onGoToRegister={(page) => {
+                  if (page === "parent") {
+                    setRegistrationTarget({ type: "parent", packageKey: "" });
+                    goTo("register");
+                  } else if (page === "teacher") {
+                    setRegistrationTarget({ type: "teacher", packageKey: "" });
+                    goTo("register");
+                  }
+                }}
               />
             )}
             {route === "about" && <AboutPage goTo={goTo} />}
-            {route === "iep" && <IEPPage openIepRegistration={openIepRegistration} openParentRegistration={openParentRegistration} />}
-            {route === "teachers" && <TeachersPage openTeacherRegistration={openTeacherRegistration} />}
-            {route === "resources" && <ResourcesPage openParentRegistration={openParentRegistration} />}
-            {route === "games" && <GamesPage />}
-            {route === "new" && (
-              <NewPage openTournamentRegistration={openTournamentRegistration} />
-            )}
-            {route === "learn" && (
-              <LearnPage openCourseRegistration={openCourseRegistration} />
-            )}
-            {route === "contact" && <ContactPage />}
+                        {route === "contact" && <ContactPage />}
             {route === "register" && (
               <RegisterPage
                 registrationTarget={registrationTarget}
@@ -446,6 +437,10 @@ export default function UserApp() {
                     mode: "login",
                   })
                 }
+                onGoToRegister={(page) => {
+                  setRegistrationTarget({ type: page === "teacher" ? "teacher" : "parent", packageKey: "" });
+                  goTo("register");
+                }}
               />
             )}
             {route === "dashboard" && (
@@ -456,6 +451,8 @@ export default function UserApp() {
                 goTo={goTo}
                 openParentRegistration={openParentRegistration}
                 onRefresh={refreshDashboard}
+                availableDashboards={availableDashboards}
+                onSwitchDashboard={switchDashboard}
                 onUpdateIep={async (userId, assessmentStatus, performanceLevel) => {
                   try {
                     const isParentStudent = String(userId).startsWith("ps_");
@@ -483,25 +480,76 @@ export default function UserApp() {
                 }}
                 loading={loadingDashboard}
                 logout={logout}
+                unreadNotifs={unreadNotifs}
+                openChat={openChat}
               />
             )}
             {route === "qoohiai" && <QoohiAIPage sessionToken={sessionToken} />}
           </MotionDiv>
         </AnimatePresence>
       </main>
-      <Footer goTo={goTo} />
+      <Footer goTo={goTo} openParentRegistration={openParentRegistration} />
+
+      {/* ── Chat Card ── */}
+      {chatOpen && chatWith && (
+        <div className="fixed bottom-4 right-4 z-50 flex h-[420px] w-[340px] flex-col rounded-2xl border border-white/20 bg-slate-900/95 shadow-2xl backdrop-blur-xl">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+            <span className="text-sm font-bold text-white">{chatWithName}</span>
+            <button type="button" onClick={() => setChatOpen(false)} className="text-xs text-slate-500 hover:text-white">✕</button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-2" style={{ scrollBehavior: "smooth" }}>
+            {chatMessages.length === 0 && <p className="text-xs text-slate-500 text-center py-4">No messages yet. Start a conversation!</p>}
+            {chatMessages.map((msg, i) => {
+              const isMine = msg.from_user_id === myUserId;
+              return (
+                <div key={i} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-xs leading-5 ${isMine ? "bg-cyan-500/20 text-cyan-100" : "bg-slate-800 text-slate-200"}`}>
+                    {!isMine && <p className="text-[10px] font-bold text-cyan-400 mb-0.5">{msg.from_name}</p>}
+                    <p>{msg.message}</p>
+                    <p className="text-[9px] text-slate-500 mt-0.5 text-right">{new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex gap-2 border-t border-white/10 p-3">
+            <input
+              className="flex-1 rounded-xl bg-slate-950/60 px-3 py-2 text-xs text-white outline-none"
+              placeholder="Type a message..."
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendChatMessage()}
+            />
+            <button
+              type="button"
+              onClick={sendChatMessage}
+              className="rounded-xl bg-cyan-400 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-cyan-300"
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Chat Notification Badge ── */}
+      {unreadNotifs.length > 0 && !chatOpen && (
+        <button
+          type="button"
+          onClick={async () => {
+            const n = unreadNotifs[0];
+            await openChat(n.from_user_id, n.from_name);
+          }}
+          className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-2xl border border-cyan-400/30 bg-cyan-500/20 px-4 py-3 text-xs font-bold text-cyan-200 shadow-lg backdrop-blur-xl hover:bg-cyan-500/30"
+        >
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-400 text-[10px] font-black text-slate-950">{unreadNotifs.length}</span>
+          New message{unreadNotifs.length > 1 ? "s" : ""}
+        </button>
+      )}
     </div>
   );
 }
 
 const menuNavItems = [
-  { id: "iep", label: "Learner IEP" },
-  { id: "teachers", label: "Teachers" },
-  { id: "resources", label: "Resources" },
-  { id: "learn", label: "Learn" },
-  { id: "games", label: "Games" },
-  { id: "new", label: "New on QOOHI" },
-  { id: "qoohiai", label: "QOOHI AI" },
   { id: "about", label: "About" },
   { id: "contact", label: "Contact" },
 ];
@@ -623,197 +671,6 @@ function Header({ route, goTo, dashboard }) {
   );
 }
 
-function HomePage({ dashboard, goTo }) {
-
-
-
-  const firstName = dashboard?.student?.fullName?.split(" ")[0];
-  const voiceScript = `Welcome ${firstName || ""} to QOOHI. We are elevating learning, creativity, and play. Explore our FC 26 tournaments, individualized education programs, and advanced AI training. Your journey to mastery starts here.`;
-  const { voiceEnabled, toggleVoice, isSpeaking } = useVoiceGuide(voiceScript);
-
-  return (
-    <div className="relative flex min-h-[78vh] items-center justify-center overflow-hidden px-4">
-      {/* VOICE TOGGLE */}
-      <div className="absolute right-6 top-6 z-20">
-        <button
-          onClick={toggleVoice}
-          className={`flex items-center gap-3 rounded-2xl border px-6 py-4 transition-all active:scale-95 ${
-            voiceEnabled 
-              ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.2)]" 
-              : "border-white/10 bg-white/5 text-slate-500"
-          }`}
-        >
-          <div className="relative flex h-3 w-3">
-            {(voiceEnabled || isSpeaking) && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75"></span>}
-            <span className={`relative inline-flex h-3 w-3 rounded-full ${voiceEnabled ? "bg-cyan-400" : "bg-slate-600"}`}></span>
-          </div>
-          <span className="text-xs font-black uppercase tracking-widest">
-            {isSpeaking ? "Speaking..." : voiceEnabled ? "Voice Guide On" : "Voice Guide Off"}
-          </span>
-        </button>
-      </div>
-
-      {/* BACKGROUND GLOW */}
-      <div className="absolute inset-0 overflow-hidden">
-        <motion.div
-          animate={{
-            scale: [1, 1.15, 1],
-            opacity: [0.25, 0.4, 0.25],
-          }}
-          transition={{
-            duration: 6,
-            repeat: Infinity,
-          }}
-          className="absolute left-1/2 top-1/2 h-[550px] w-[550px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan-400/10 blur-3xl"
-        />
-      </div>
-
-      {/* CONTENT */}
-      <div className="relative z-10 w-full max-w-6xl px-4 py-20 text-center">
-
-        {/* WELCOME */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7 }}
-          className="mb-6"
-        >
-          <span className="inline-block rounded-full border border-cyan-400/20 bg-cyan-400/10 px-6 py-2 text-[10px] font-black uppercase tracking-[0.5em] text-cyan-400 backdrop-blur-md shadow-[0_0_20px_rgba(34,211,238,0.1)]">
-            {firstName ? `Welcome Back, ${firstName}` : "Welcome To The Future"}
-          </span>
-        </motion.div>
-
-        {/* QOOHI */}
-        <div className="relative inline-block group">
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{
-              duration: 1,
-              ease: [0.16, 1, 0.3, 1],
-            }}
-            className="
-              relative
-              z-10
-              bg-gradient-to-b
-              from-white
-              via-white/90
-              to-cyan-200/40
-              bg-clip-text
-              text-6xl
-              xs:text-7xl
-              font-black
-              leading-none
-              tracking-tight
-              text-transparent
-              sm:text-[9rem]
-              lg:text-[13rem]
-              xl:text-[15rem]
-            "
-          >
-            QOOHI
-          </motion.h1>
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 0.5 }}
-            className="absolute inset-0 z-0 blur-3xl bg-cyan-400/30 -inset-x-10 group-hover:bg-cyan-400/50 transition-colors duration-1000"
-          />
-        </div>
-
-        {/* SUBTEXT */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{
-            delay: 0.4,
-            duration: 1,
-          }}
-          className="mx-auto mt-8 max-w-2xl text-lg font-medium tracking-[0.2em] text-slate-400 sm:text-2xl"
-        >
-          Elevating <span className="text-white border-b border-cyan-400/30 pb-1">Learning</span>, <span className="text-white border-b border-cyan-400/30 pb-1">Creativity</span> & <span className="text-white border-b border-cyan-400/30 pb-1">Play</span>
-        </motion.p>
-
-        {/* BUTTONS GRID */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{
-            delay: 0.7,
-            duration: 0.8,
-          }}
-          className="mt-20 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 xl:gap-6"
-        >
-
-          {/* FC26 */}
-          <HomeButton 
-            onClick={() => goTo("new")}
-            image={fc26Img}
-            label="FC 26"
-            sublabel="Tournament"
-          />
-
-          {/* LEARN */}
-          <HomeButton 
-            onClick={() => goTo("learn")}
-            image={learnImg}
-            label="Learn"
-            sublabel="Courses"
-          />
-
-          {/* LOGIN */}
-          <HomeButton
-            onClick={() => {
-              if (dashboard) {
-                goTo("dashboard");
-              } else {
-                goTo("login");
-              }
-            }}
-            image={loginImg}
-            label={dashboard ? "Dashboard" : "Login"}
-            sublabel="Dashboard"
-          />
-       
-
-          {/* IEP */}
-          <HomeButton 
-            onClick={() => goTo("iep")}
-            image={iepImg}
-            label="IEP"
-            sublabel="Performance"
-          />
-
-          {/* TEACHERS */}
-          <HomeButton 
-            onClick={() => goTo("teachers")}
-            image={teacherImg}
-            label="Teacher"
-            sublabel="Community"
-          />
-
-          {/* RESOURCES */}
-          <HomeButton 
-            onClick={() => goTo("resources")}
-            image={libraryImg}
-            label="Library"
-            sublabel="Resources"
-          />
-
-          {/* QOOHI AI */}
-          <HomeButton 
-            onClick={() => goTo("qoohiai")}
-            image={qoohiAiImg}
-            label="QOOHI AI"
-            sublabel="Smart Assistant"
-            highlight
-          />
-
-        </motion.div>
-      </div>
-    </div>
-  );
-}
-
 function HomeButton({ onClick, image, label, sublabel, highlight = false }) {
   return (
     <button
@@ -844,35 +701,10 @@ function HomeButton({ onClick, image, label, sublabel, highlight = false }) {
   );
 }
 
-function EventHero() {
-  return (
-    <div className="relative">
-      <img
-        src={fc26Img}
-        alt="FC 26 tournament"
-        className="h-[320px] w-full rounded-[2rem] object-cover shadow-2xl shadow-black/50"
-      />
-      <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-t from-slate-950 via-slate-950/10 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 p-6">
-        <p className="text-xs font-bold uppercase tracking-[0.35em] text-amber-200">
-          New on QOOHI
-        </p>
-        <h2 className="mt-2 text-3xl font-black text-white">{tournamentInfo.title}</h2>
-        <p className="mt-2 text-sm text-slate-200">
-          Register with Ksh {tournamentInfo.feeKsh}. Winner gets Ksh{" "}
-          {tournamentInfo.winnerPrizeKsh}.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function AboutPage({ goTo }) {
   const [qaInput, setQaInput] = useState("");
   const [qaLoading, setQaLoading] = useState(false);
   const [qaMessages, setQaMessages] = useState([]);
-
-  const voiceScript = "Welcome to QOOHI. We are on a mission to bridge the gap between potential and success for every Kenyan student. Our platform combines advanced diagnostics with expert mentorship to create a truly personalized learning journey. I am here to answer any questions you may have about our vision, programs, or tournaments. Just type your question below.";
 
   const askQoohiExpert = async (e) => {
     e.preventDefault();
@@ -892,7 +724,7 @@ function AboutPage({ goTo }) {
       - Core Realization: Every learner is unique; traditional models fail Individualized Education Programs (IEP).
       - Pillars: 
         1. Tech First (AI, modern software, real-time tracking).
-        2. Human Centered (Teachers as mentors focusing on emotional/cognitive growth).
+        2. Human Centered (Coaches as mentors focusing on emotional/cognitive growth).
         3. Gamified Mastery (Using gaming and tournaments for engagement).
       - Vision: Empower 1 million Kenyans to build, innovate, and lead in the global digital economy.
       - Programs:
@@ -954,7 +786,7 @@ function AboutPage({ goTo }) {
   ];
 
   return (
-    <PageStack title="Our Story" subtitle="Pioneering the next generation of individualized education." voiceScript={voiceScript}>
+    <PageStack title="Our Story" subtitle="Pioneering the next generation of individualized education.">
       <div className="space-y-20 pb-12">
         {/* MISSION HERO */}
         <section className="relative overflow-hidden rounded-[2rem] bg-slate-900 border border-white/10">
@@ -1054,7 +886,7 @@ function AboutPage({ goTo }) {
             To empower 1 million <span className="text-cyan-400">Kenyans</span> with the skills to <span className="text-white/60">build</span>, <span className="text-white/60">innovate</span>, and <span className="text-white/60">lead</span> in the global digital economy.
           </h2>
           <div className="mt-16 flex flex-wrap justify-center gap-6">
-            <ActionButton className="!px-12 !py-6 !text-xl shadow-[0_0_30px_rgba(34,211,238,0.3)]" onClick={() => goTo("learn")}>
+            <ActionButton className="!px-12 !py-6 !text-xl shadow-[0_0_30px_rgba(34,211,238,0.3)]" onClick={() => goTo("contact")}>
               Explore Programs
             </ActionButton>
             <SecondaryButton className="!px-12 !py-6 !text-xl" onClick={() => goTo("contact")}>
@@ -1068,13 +900,11 @@ function AboutPage({ goTo }) {
 }
 
 function IEPPage({ openIepRegistration, openParentRegistration }) {
-  const voiceScript = "Welcome to the Individualized Education Program. Here, we don't just teach; we transform. Every student receives a unique diagnostic assessment to find their perfect learning band. From Foundational to Advanced, we map your path to success.";
 
   return (
     <PageStack 
       title="Individualized Education" 
       subtitle="Data-driven diagnostic assessment and adaptive level placement."
-      voiceScript={voiceScript}
     >
       <div className="grid gap-8 lg:grid-cols-2">
         <div className="relative overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900 group shadow-2xl">
@@ -1116,12 +946,12 @@ function IEPPage({ openIepRegistration, openParentRegistration }) {
 function TeachersPage({ openTeacherRegistration }) {
   return (
     <PageStack 
-      title="Teacher Portal" 
-      subtitle="Teachers as Solution Providers"
+      title="Coach Portal" 
+      subtitle="Coaches as Solution Providers"
     >
       <div className="grid gap-8 lg:grid-cols-2">
         <div className="relative overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900 group">
-          <img src={teacherImg} alt="Teachers" className="absolute inset-0 h-full w-full object-cover opacity-40 transition-transform duration-700 group-hover:scale-110" />
+          <img src={teacherImg} alt="Coaches" className="absolute inset-0 h-full w-full object-cover opacity-40 transition-transform duration-700 group-hover:scale-110" />
           <div className="absolute inset-0 bg-gradient-to-br from-slate-950/90 via-slate-950/40 to-transparent" />
           <div className="relative p-10 sm:p-14">
             <SectionLabel>Core Focus</SectionLabel>
@@ -1138,7 +968,7 @@ function TeachersPage({ openTeacherRegistration }) {
           <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-cyan-400/10 blur-[100px]" />
           <SectionLabel>Join Our Faculty</SectionLabel>
           <h2 className="mt-8 text-4xl font-black text-white leading-tight sm:text-5xl">Empower your classroom with data-driven <span className="text-cyan-400 underline decoration-cyan-400/30 underline-offset-8">IEP tools</span>.</h2>
-          <ActionButton className="mt-12 !text-xl !py-6 !rounded-[2rem]" onClick={openTeacherRegistration}>Register as Teacher</ActionButton>
+          <ActionButton className="mt-12 !text-xl !py-6 !rounded-[2rem]" onClick={openTeacherRegistration}>Register as Coach</ActionButton>
         </div>
       </div>
     </PageStack>
@@ -1146,13 +976,11 @@ function TeachersPage({ openTeacherRegistration }) {
 }
 
 function ResourcesPage({ openParentRegistration }) {
-  const voiceScript = "The QOOHI Resource Library. Your gateway to mastery. Access digital e-books, gamified exercises, and interactive videos, or order physical workbooks and activity kits delivered to your doorstep. Supporting every step of your growth.";
 
   return (
     <PageStack 
       title="Digital Library" 
       subtitle="Comprehensive soft and hard learning resources for every stage."
-      voiceScript={voiceScript}
     >
       <div className="grid gap-8 lg:grid-cols-2">
         <div className="relative overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900 group">
@@ -1201,7 +1029,6 @@ function ResourcesPage({ openParentRegistration }) {
 }
 
 function GamesPage() {
-  const voiceScript = "Welcome to QOOHI Games. This is where competition meets community. Whether you are here for the FC 26 tournament, squad tactics in COD, or the social hub of GTA, gaming on QOOHI is about more than just play—it is about mastery and engagement. Join a tournament and climb the standings today.";
   const games = [
     { name: "FC 26", copy: "Tournament football and community competition.", image: fc26Img, sub: "Community Play" },
     { name: "COD", copy: "Action and squad-based gameplay.", image: codImg, sub: "Squad Tactics" },
@@ -1209,7 +1036,7 @@ function GamesPage() {
   ];
 
   return (
-    <PageStack title="QOOHI Games" subtitle="Gaming feeds tournament registration and standings." voiceScript={voiceScript}>
+    <PageStack title="QOOHI Games" subtitle="Gaming feeds tournament registration and standings.">
       <div className="grid gap-8 md:grid-cols-3">
         {games.map((game) => (
           <div key={game.name} className="group relative flex flex-col overflow-hidden rounded-[3rem] border border-white/10 bg-slate-950 transition-all hover:border-cyan-400/40 hover:-translate-y-2">
@@ -1236,13 +1063,11 @@ function GamesPage() {
 }
 
 function NewPage({ openTournamentRegistration }) {
-  const voiceScript = "The QOOHI Spotlight. Where competition meets community. Register for our featured FC 26 tournament, win big, and climb the standings. Stay updated with the latest in digital sports and community events.";
 
   return (
     <PageStack 
       title="Spotlight" 
       subtitle="Latest updates and featured community tournaments."
-      voiceScript={voiceScript}
     >
       <div className="relative overflow-hidden rounded-[4rem] border border-white/10 bg-slate-950 shadow-2xl group">
         <div className="grid gap-0 lg:grid-cols-2">
@@ -1279,306 +1104,112 @@ function NewPage({ openTournamentRegistration }) {
   );
 }
 
-function LearnPage({ openCourseRegistration }) {
-  const voiceScript = "Welcome to QOOHI Learning. Master the digital future with our expert-led courses. Choose from our Starter Track for computer essentials, our Creator Track for Coding and AI, or enroll in the Full Course for the ultimate transformation. Your journey to digital mastery starts here.";
+function InstitutionPage() {
+  const apiBase = import.meta.env.VITE_INSTITUTION_API_BASE || "http://localhost:8081/api/schools";
+  const [form, setForm] = useState({ name: "", email: "", school_type: "junior", location: "", phone: "" });
+  const [code, setCode] = useState("");
+  const [token, setToken] = useState("");
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [institutionMode, setInstitutionMode] = useState("register");
+
+  const post = async (path, body, accessToken = "") => {
+    const response = await fetch(`${apiBase}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Institution service request failed.");
+    return data;
+  };
+
+  const register = async (event) => {
+    event.preventDefault(); setBusy(true); setError(""); setStatus("");
+    try {
+      const data = await post("/register/", form);
+      setStatus(data.message || "Verification code sent. Check the institution email.");
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  };
+
+  const verify = async (event) => {
+    event.preventDefault(); setBusy(true); setError("");
+    try {
+      const data = await post("/verify/", { email: form.email, code });
+      setToken(data.access_token);
+      setStatus("Institution verified. Your school workspace is ready.");
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  };
+
+  const setup = async () => {
+    setBusy(true); setError("");
+    try {
+      await post("/setup/", {}, token);
+      setStatus("Institution structure created with default sections. You can now add classes and students.");
+    } catch (err) { setError(err.message); } finally { setBusy(false); }
+  };
+
+  const institutionLogin = async (event) => {
+    event.preventDefault(); setBusy(true); setError(""); setStatus("");
+    try { const data = await post("/login/", { email: form.email }); setStatus(data.message || "Verification code sent."); setInstitutionMode("verify"); } catch (err) { setError(err.message); } finally { setBusy(false); }
+  };
 
   return (
-    <PageStack 
-      title="Mastery Center" 
-      subtitle="Expert-led paths for Computer Packages, Coding, and Artificial Intelligence."
-      voiceScript={voiceScript}
-    >
-      <div className="grid gap-8 lg:grid-cols-3">
-        {packageCards.map((item) => (
-          <div key={item.key} className="group relative flex h-full flex-col overflow-hidden rounded-[3rem] border border-white/10 bg-slate-950 transition-all duration-500 hover:border-cyan-400/30 hover:shadow-[0_0_40px_rgba(34,211,238,0.15)]">
-            <div className="relative h-64 overflow-hidden bg-gradient-to-br from-slate-900 to-slate-950 p-10 flex flex-col justify-end">
-              <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-cyan-400/5 blur-3xl transition-all group-hover:bg-cyan-400/10" />
-              <div className="relative z-10">
-                <SectionLabel className="!text-cyan-400">{item.badge}</SectionLabel>
-                <h2 className="mt-4 text-4xl font-black text-white uppercase tracking-tighter italic leading-none">{item.name}</h2>
-              </div>
-            </div>
-            
-            <div className="flex flex-1 flex-col p-8">
-              <div className="rounded-2xl border border-white/5 bg-white/5 p-6 backdrop-blur-md">
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-200/60">
-                  Curriculum Includes
-                </p>
-                <ul className="mt-5 space-y-4 text-sm font-bold text-slate-300">
-                  {item.courses.map((course) => (
-                    <li key={course} className="flex items-center gap-3">
-                      <div className="h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
-                      <span>{course}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              
-              <div className="mt-auto pt-8 flex items-center justify-between border-t border-white/5">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Tuition Fee</p>
-                  <p className="mt-1 text-3xl font-black text-white">Ksh {item.priceKsh.toLocaleString()}</p>
-                </div>
-                <ActionButton onClick={() => openCourseRegistration(item.key)} className="!py-4 !px-8 !rounded-2xl shadow-xl shadow-cyan-400/20">
-                  Enroll
-                </ActionButton>
-              </div>
-            </div>
-          </div>
-        ))}
+    <AuthShell isRegister={institutionMode === "register"} onLogin={() => setInstitutionMode("login")} onRegister={() => setInstitutionMode("register")}>
+      <div className="qoohi-institution-form">
+        {institutionMode === "register" && <><h1>Create Account</h1><p className="qoohi-institution-kicker">Register your institution</p><form className="mt-3 space-y-2" onSubmit={register}><input required placeholder="School name" value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} /><input required type="email" placeholder="Institution email" value={form.email} onChange={(e) => setForm((c) => ({ ...c, email: e.target.value }))} /><input required placeholder="Location" value={form.location} onChange={(e) => setForm((c) => ({ ...c, location: e.target.value }))} /><input placeholder="Phone number" value={form.phone} onChange={(e) => setForm((c) => ({ ...c, phone: e.target.value }))} /><select value={form.school_type} onChange={(e) => setForm((c) => ({ ...c, school_type: e.target.value }))}><option value="junior">Junior / primary pathway</option><option value="senior">Senior secondary</option></select><button disabled={busy} className="qoohi-auth-btn w-full" type="submit">{busy ? "Sending..." : "Register institution"}</button></form></>}
+        {institutionMode === "login" && <><h1>Institution Login</h1><p className="qoohi-institution-kicker">Access your institution workspace</p><form className="mt-3 space-y-2" onSubmit={institutionLogin}><input required type="email" placeholder="Institution email" value={form.email} onChange={(e) => setForm((c) => ({ ...c, email: e.target.value }))} /><button disabled={busy} className="qoohi-auth-btn w-full" type="submit">{busy ? "Sending..." : "Send login code"}</button></form></>}
+        {institutionMode === "verify" && <><h1>Verify Email</h1><p className="qoohi-institution-kicker">Enter the code sent to {form.email}</p><form className="mt-3 space-y-2" onSubmit={verify}><input required inputMode="numeric" maxLength="6" placeholder="Six-digit verification code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} /><button disabled={busy || !code || !form.email} className="qoohi-auth-btn qoohi-institution-outline w-full" type="submit">{busy ? "Verifying..." : "Verify email"}</button></form>{token && <button type="button" disabled={busy} onClick={setup} className="qoohi-auth-btn w-full">Initialize school structure</button>}</>}
+        {(status || error) && <p className={error ? "qoohi-institution-error" : "qoohi-institution-status"}>{error || status}</p>}
       </div>
-    </PageStack>
+    </AuthShell>
   );
 }
 
-function ContactPage() {
-  const voiceScript = "Need to get in touch? We are here to help. You can reach us via email, WhatsApp, or access your student dashboard for support. We look forward to hearing from you.";
+function AuthShell({ children, isRegister = false, onRegister, onLogin }) {
   return (
-    <PageStack title="Contact QOOHI" voiceScript={voiceScript}>
-      <div className="grid gap-6 md:grid-cols-3">
-        <ContactCard icon={FaEnvelope} label="Email" value="Email QOOHI" href="mailto:qoohitech@gmail.com" />
-        <ContactCard
-          icon={FaWhatsapp}
-          label="WhatsApp"
-          value="+254 712 451604"
-          href="https://wa.me/254712451604?text=QOOHI%20HELLO"
-        />
-        <ContactCard icon={FaUsers} label="STUDENT ACCESS" value="DASHBOARD" href="#login" />
-      </div>
-    </PageStack>
+    <div className={`qoohi-auth-container ${isRegister ? "active" : ""}`}>
+      <div className={`qoohi-auth-form-box ${isRegister ? "qoohi-auth-sign-up" : "qoohi-auth-login"}`}><div className="qoohi-auth-form">{children}</div></div>
+      <div className="qoohi-auth-toggle-container"><div className="qoohi-auth-toggle">
+        <div className="qoohi-auth-toggle-panel qoohi-auth-toggle-left"><h1>Welcome Back!</h1><p>Already have an account?</p><button type="button" className="qoohi-auth-btn qoohi-auth-btn-hidden" onClick={onLogin}>Login</button></div>
+        <div className="qoohi-auth-toggle-panel qoohi-auth-toggle-right"><h1>Hello, Welcome</h1><p>Don&apos;t have an Account</p><button type="button" className="qoohi-auth-btn qoohi-auth-btn-hidden" onClick={onRegister}>Register</button></div>
+      </div></div>
+    </div>
   );
+}
+
+function SocialButtons({ mode = "login", role = "" }) {
+  const startOAuth = () => {
+    const params = new URLSearchParams({ mode });
+    if (mode === "register" && role) params.set("role", role);
+    window.location.assign(`${API_BASE}/api/auth/oauth/google/start?${params.toString()}`);
+  };
+  return <div className="grid grid-cols-1 gap-3"><button type="button" onClick={startOAuth} className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 font-bold text-slate-700 transition hover:bg-slate-50"><FaGoogle className="text-red-500" /> Continue with Google</button></div>;
+}
+
+function DashboardChooser({ dashboards, onSelect }) {
+  return <AuthShell><div className="w-full space-y-4 text-center"><h1>Select Dashboard</h1><p className="text-sm text-slate-500">Choose the QOOHI workspace you want to open.</p>{dashboards.map((item) => <button key={item.role} type="button" onClick={() => onSelect(item.role)} className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-cyan-400 hover:bg-cyan-50"><span><b className="block text-slate-800">{item.name}</b><small className="capitalize text-slate-500">{item.role === "teacher" ? "Coach" : "Parent"}</small></span><span className="text-xs font-black uppercase text-cyan-700">Open</span></button>)}</div></AuthShell>;
+}
+
+function LoginPage({ onSubmit, statusMessage, onGoToRegister }) {
+  const [email, setEmail] = useState(""); const [submitting, setSubmitting] = useState(false); const [error, setError] = useState(""); const [checkingRoles, setCheckingRoles] = useState(false); const [dashboards, setDashboards] = useState([]);
+  const submit = async (event) => { event.preventDefault(); if (!email.trim()) return; setError(""); setCheckingRoles(true); try { const data = await fetchJson("/api/auth/check-roles", { method: "POST", body: JSON.stringify({ email }) }); if (data.single) { setSubmitting(true); await onSubmit({ email, selectedRole: "" }); setSubmitting(false); } else if (data.dashboards?.length > 1) setDashboards(data.dashboards); } catch (err) { setError(err.message); setDashboards([]); } finally { setCheckingRoles(false); } };
+  const selectAndLogin = async (role) => { setSubmitting(true); setError(""); try { await onSubmit({ email, selectedRole: role }); } catch (err) { setError(err.message); } finally { setSubmitting(false); } };
+  return <AuthShell isRegister={false} onRegister={() => onGoToRegister?.("parent")}>
+    {dashboards.length === 0 ? <form className="space-y-4" onSubmit={submit}><h1>Login</h1><Input label="Email" type="email" value={email} onChange={setEmail} />{(statusMessage || error) && <Notice tone={error ? "error" : "info"}>{error || statusMessage}</Notice>}<ActionButton disabled={submitting || checkingRoles} type="submit" className="w-full">{checkingRoles ? "Checking..." : submitting ? "Sending..." : "Login"}</ActionButton><div className="qoohi-social-copy">or continue with Google</div><SocialButtons mode="login" /><div className="qoohi-auth-note">No account? Use the Register panel.</div></form> : <div className="space-y-4"><h1>Select Dashboard</h1><p className="text-sm text-slate-500">Choose which dashboard to open:</p>{dashboards.map((db, i) => <button key={i} type="button" onClick={() => selectAndLogin(db.role)} disabled={submitting} className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 p-3 text-left"><span><b className="block capitalize text-slate-800">{db.role}</b><small className="text-slate-500">{db.name}</small></span><span className="text-xs font-bold uppercase text-cyan-700">Select</span></button>)}</div>}
+  </AuthShell>;
 }
 
 function RegisterPage({ registrationTarget, onSubmit, statusMessage }) {
-  const [form, setForm] = useState({ fullName: "", whatsapp: "", email: "" });
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const selectedPackage = packageCards.find((item) => item.key === registrationTarget.packageKey);
-  const isTournament = registrationTarget.type === "tournament";
-  const isTeacher = registrationTarget.type === "teacher";
-  const isStudent = registrationTarget.type === "student";
-  const isParent = registrationTarget.type === "parent";
-  const isIep = registrationTarget.type === "iep";
-
-  const getEyebrow = () => {
-    if (isTournament) return "Tournament registration";
-    if (isTeacher) return "Teacher Registration";
-    if (isStudent) return "Learner Registration";
-    if (isParent) return "Parent Registration";
-    if (isIep) return "IEP Assessment Registration";
-    return "Course registration";
-  };
-
-  const getTitle = () => {
-    if (isTournament) return "Register for the FC 26 tournament";
-    if (isTeacher) return "Join as a Problem-Solving Teacher";
-    if (isStudent) return "Register for Individualized Learning";
-    if (isParent) return "Register as a Supporting Parent";
-    if (isIep) return "Register for IEP Assessment";
-    return `Register for ${selectedPackage?.name || "QOOHI learning"}`;
-  };
-
-  const submit = async (event) => {
-    event.preventDefault();
-    setSubmitting(true);
-    setError("");
-    try {
-      await onSubmit({
-        ...form,
-        mode: "register",
-        registrationType: registrationTarget.type,
-        selectedPackage: (isTeacher || isStudent || isParent || isTournament || isIep) ? "" : registrationTarget.packageKey,
-      });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <CenteredPanel
-      eyebrow={getEyebrow()}
-      title={getTitle()}
-    >
-      <div className="mb-6 rounded-[1.5rem] border border-cyan-300/20 bg-cyan-400/10 p-6 text-lg font-bold text-cyan-50">
-        {isTournament ? (
-          <ul className="space-y-1">
-            <li>• Entry Fee: Ksh {tournamentInfo.feeKsh}</li>
-            <li>• Winner: Ksh {tournamentInfo.winnerPrizeKsh}</li>
-          </ul>
-        ) : isTeacher ? (
-          <ul className="space-y-1">
-            <li>• Access IEP Tools</li>
-            <li>• Placement Data</li>
-            <li>• Teaching Resources</li>
-          </ul>
-        ) : isStudent ? (
-          <ul className="space-y-1">
-            <li>• Diagnostic Assessment</li>
-            <li>• Personal Roadmap</li>
-            <li>• Level Placement</li>
-          </ul>
-        ) : isIep ? (
-          <ul className="space-y-1">
-            <li>• Diagnostic Assessment</li>
-            <li>• Personalized Learning Plan</li>
-            <li>• Level Placement</li>
-          </ul>
-        ) : isParent ? (
-          <ul className="space-y-1">
-            <li>• Progress Tracking</li>
-            <li>• Material Purchase</li>
-          </ul>
-        ) : (
-          <p>
-            • Package: <strong>{selectedPackage?.name}</strong> <br />
-            • Price: <strong>Ksh {selectedPackage?.priceKsh}</strong>
-          </p>
-        )}
-      </div>
-      <form className="space-y-4" onSubmit={submit}>
-        <Input label="Full name" value={form.fullName} onChange={(value) => setForm((current) => ({ ...current, fullName: value }))} />
-        <Input label="WhatsApp number" value={form.whatsapp} onChange={(value) => setForm((current) => ({ ...current, whatsapp: value }))} />
-        <Input label="Email address" type="email" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} />
-        {statusMessage && <Notice tone="info">{statusMessage}</Notice>}
-        {error && <Notice tone="error">{error}</Notice>}
-        <ActionButton disabled={submitting} type="submit">
-          {submitting ? "Sending code..." : "Send code"}
-        </ActionButton>
-      </form>
-    </CenteredPanel>
-  );
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", whatsapp: "", specialization: "", childName: "", childGradeLevel: "", childGoals: "", selectedPackage: registrationTarget.packageKey || "coding_ai_training" }); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [selectedRole, setSelectedRole] = useState(registrationTarget.type === "teacher" ? "teacher" : "parent"); const type = selectedRole; const label = type === "teacher" ? "Coach" : "Parent"; const set = (key) => (value) => setForm((current) => ({ ...current, [key]: value }));
+  const submit = async (event) => { event.preventDefault(); setBusy(true); setError(""); try { await onSubmit({ ...form, fullName: `${form.firstName} ${form.lastName}`.trim(), registrationType: registrationTarget.type === "course" ? "course" : type, registrationRole: type }); } catch (err) { setError(err.message); } finally { setBusy(false); } };
+  return <AuthShell isRegister={true} onLogin={() => { window.location.hash = "login"; }}><form className="space-y-4" onSubmit={submit}><h1>Create Account</h1><p className="qoohi-role-label">Register as</p><div className="qoohi-role-picker"><button type="button" className={selectedRole === "parent" ? "selected" : ""} onClick={() => setSelectedRole("parent")}>Parent</button><button type="button" className={selectedRole === "teacher" ? "selected" : ""} onClick={() => setSelectedRole("teacher")}>Coach</button></div><div className="grid gap-4 sm:grid-cols-2"><Input label="First name" value={form.firstName} onChange={set("firstName")} /><Input label="Last name" value={form.lastName} onChange={set("lastName")} /></div><Input label="Email address" type="email" value={form.email} onChange={set("email")} /><Input label="WhatsApp number" type="tel" value={form.whatsapp} onChange={set("whatsapp")} />{type === "teacher" && <Input label="Specialisation (e.g. Mathematics, Physics, Grade 10)" value={form.specialization} onChange={set("specialization")} />}{(type === "parent" || type === "iep") && <div className="grid gap-4 sm:grid-cols-2"><Input label="Child’s name" value={form.childName} onChange={set("childName")} /><Input label="Child’s grade" value={form.childGradeLevel} onChange={set("childGradeLevel")} /></div>}{type === "course" && <label className="block"><span className="mb-2 block text-sm font-bold text-slate-200">Learning package</span><select value={form.selectedPackage} onChange={(e) => set("selectedPackage")(e.target.value)} className="w-full rounded-[1.25rem] border border-white/10 bg-slate-950/60 px-5 py-4 text-white outline-none"><option value="computer_packages">Computer Packages</option><option value="coding_ai_training">Coding and AI Training</option><option value="both">Both Packages</option></select></label>}{(statusMessage || error) && <Notice tone={error ? "error" : "info"}>{error || statusMessage}</Notice>}<ActionButton disabled={busy} type="submit" className="w-full">{busy ? "Sending code..." : "Create account"}</ActionButton><div className="relative py-3 text-center text-xs font-black uppercase tracking-widest text-slate-500"><span className="bg-slate-950 px-3">or sign up with Google</span><span className="absolute inset-x-0 top-1/2 -z-10 border-t border-white/10" /></div><SocialButtons mode="register" role={selectedRole} /></form></AuthShell>;
 }
 
 function VerifyPage({ pendingVerification, onVerify, statusMessage }) {
-  const [code, setCode] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-
-  const submit = async (event) => {
-    event.preventDefault();
-    setSubmitting(true);
-    setError("");
-    try {
-      await onVerify({
-        email: pendingVerification.email,
-        code,
-        mode: pendingVerification.mode,
-        selectedRole: pendingVerification.selectedRole,
-      });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <CenteredPanel eyebrow="Verify code">
-      <form className="space-y-4" onSubmit={submit}>
-        <Input label="Verification code" value={code} onChange={setCode} />
-        {statusMessage && <Notice tone="info">{statusMessage}</Notice>}
-        {error && <Notice tone="error">{error}</Notice>}
-        <ActionButton disabled={submitting} type="submit">
-          {submitting ? "Verifying..." : "Verify and continue"}
-        </ActionButton>
-      </form>
-    </CenteredPanel>
-  );
-}
-
-function LoginPage({ onSubmit, statusMessage }) {
-  const [email, setEmail] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const [checkingRoles, setCheckingRoles] = useState(false);
-  const [dashboards, setDashboards] = useState([]);
-  const [selectedRole, setSelectedRole] = useState("");
-
-  const submit = async (event) => {
-    event.preventDefault();
-    if (!email.trim()) return;
-    setError("");
-    setCheckingRoles(true);
-    try {
-      const data = await fetchJson("/api/auth/check-roles", {
-        method: "POST",
-        body: JSON.stringify({ email }),
-      });
-      if (data.single) {
-        setDashboards([]);
-        setSubmitting(true);
-        await onSubmit({ email, selectedRole: "" });
-        setSubmitting(false);
-      } else if (data.dashboards && data.dashboards.length > 1) {
-        setDashboards(data.dashboards);
-      }
-    } catch (err) {
-      setError(err.message);
-      setDashboards([]);
-    } finally {
-      setCheckingRoles(false);
-    }
-  };
-
-  const selectAndLogin = async (role) => {
-    setSelectedRole(role);
-    setSubmitting(true);
-    setError("");
-    try {
-      await onSubmit({ email, selectedRole: role });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <CenteredPanel eyebrow="login">
-      {dashboards.length === 0 ? (
-        <form className="space-y-4" onSubmit={submit}>
-          <Input label="Email address" type="email" value={email} onChange={setEmail} />
-          {statusMessage && <Notice tone="info">{statusMessage}</Notice>}
-          {error && <Notice tone="error">{error}</Notice>}
-          <ActionButton disabled={submitting || checkingRoles} type="submit">
-            {checkingRoles ? "Checking..." : submitting ? "Sending..." : "Send login code"}
-          </ActionButton>
-        </form>
-      ) : (
-        <div className="space-y-4">
-          <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Select Dashboard</p>
-          <p className="text-sm text-slate-400">This email has multiple dashboards. Choose which one to open:</p>
-          <div className="space-y-2">
-            {dashboards.map((db, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => selectAndLogin(db.role)}
-                disabled={submitting}
-                className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4 text-left transition hover:border-cyan-400/30 hover:bg-cyan-400/5"
-              >
-                <div>
-                  <p className="font-bold text-white capitalize">{db.role}</p>
-                  <p className="text-xs text-slate-400">{db.name}</p>
-                </div>
-                <span className="rounded-full bg-cyan-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-cyan-300">Select</span>
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={() => { setDashboards([]); setEmail(""); }}
-            className="text-xs text-slate-500 hover:text-white transition"
-          >
-            Use a different email
-          </button>
-          {error && <Notice tone="error">{error}</Notice>}
-        </div>
-      )}
-    </CenteredPanel>
-  );
+  const [code, setCode] = useState(""); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const submit = async (event) => { event.preventDefault(); setBusy(true); setError(""); try { await onVerify({ ...pendingVerification, code }); } catch (err) { setError(err.message); } finally { setBusy(false); } };
+  return <AuthShell><form className="space-y-5" onSubmit={submit}><h1>Verify Email</h1><label className="block"><span className="mb-2 block text-sm font-bold text-slate-200">Six-digit code</span><input autoFocus required inputMode="numeric" maxLength="6" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} className="w-full rounded-[1.25rem] border border-cyan-300/30 bg-slate-950/60 px-5 py-5 text-center text-3xl font-black tracking-[.45em] text-white outline-none focus:border-cyan-300" placeholder="000000" /></label>{(error || statusMessage) && <Notice tone={error ? "error" : "info"}>{error || statusMessage}</Notice>}<ActionButton disabled={busy || code.length < 4} type="submit" className="w-full">{busy ? "Verifying..." : "Verify email"}</ActionButton></form></AuthShell>;
 }
 
 function DashboardPage({
@@ -1590,7 +1221,11 @@ function DashboardPage({
   goTo,
   sessionToken,
   onRefresh,
+  availableDashboards,
+  onSwitchDashboard,
   openParentRegistration,
+  unreadNotifs,
+  openChat,
 }) {
   const [showMessages, setShowMessages] = useState(false);
   const [editingIep, setEditingIep] = useState(null);
@@ -1606,7 +1241,7 @@ function DashboardPage({
     whatsapp: "",
     avatarUrl: "",
   });
-  const [depositForm, setDepositForm] = useState({ mpesaMessage: "" });
+  const [depositForm, setDepositForm] = useState({ phone: "", amount: "" });
   const [depositResult, setDepositResult] = useState(null);
   const [withdrawForm, setWithdrawForm] = useState({
     amount: "",
@@ -1665,7 +1300,6 @@ function DashboardPage({
   );
   const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
   const firstName = fullName?.split(" ")[0] || "";
-  const profileScript = `Welcome ${firstName || ""} to your QOOHI dashboard. Review your profile, balance, services, and activity. Deposit funds, withdraw when needed, and keep your learning journey moving.`;
 
   const parentChildren = teacherOverview
     ? (teacherOverview.children || []).map((c) => ({
@@ -1701,7 +1335,7 @@ function DashboardPage({
     resume_generation: { route: "qoohiai", label: "Build Resume" },
     cyber_services: { route: "contact", label: "Open Support" },
     iep_assessment: { route: "iep", label: "Take Assessment" },
-    teacher_registration: { route: "teachers", label: "Open Teachers" },
+    teacher_registration: { route: "teachers", label: "Open Coaches" },
     parent_registration: { route: "resources", label: "Open Resources" },
     profile_update: { route: null, label: "Edit Profile" },
   };
@@ -1718,7 +1352,6 @@ function DashboardPage({
     ...(isParent ? [{ id: "parent", Icon: FaUsers, label: "Support" }] : []),
     ...(isParent ? [{ id: "register-child", Icon: FaUserGraduate, label: "Register Your Child" }] : []),
     ...(isParent ? [{ id: "materials", Icon: FaBookOpen, label: "Materials" }] : []),
-    ...(hasTournament ? [{ id: "tournament", Icon: FaTrophy, label: "Tournament" }] : []),
   ];
 
   const openProfile = (tab = "view") => {
@@ -1776,12 +1409,13 @@ function DashboardPage({
     setProfileStatus("");
     setDepositResult(null);
     try {
-      const res = await fetchJson("/api/deposit/mpesa-message", {
-        method: "POST",
-        headers: authHeaders,
-        body: JSON.stringify({ mpesaMessage: depositForm.mpesaMessage }),
+      const response = await fetch(`${MPESA_API_BASE}/api/mpesa/stk-push`, {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${sessionToken}` },
+        body: JSON.stringify({ phone: depositForm.phone, amount: Number(depositForm.amount), accountReference: dashboard.student.email, description: "QOOHI wallet deposit" }),
       });
-      setDepositForm({ mpesaMessage: "" });
+      const res = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(res.error || "Could not send STK Push.");
+      setDepositForm({ phone: "", amount: "" });
       setDepositResult(res);
       await onRefresh?.();
     } catch (err) {
@@ -1820,9 +1454,26 @@ function DashboardPage({
     <PageStack
       title="Dashboard"
       subtitle="Profile, balance, services, and activity"
-      voiceScript={profileScript}
       compact
     >
+      {unreadNotifs?.length > 0 && (
+        <div className="mb-4 space-y-2">
+          {unreadNotifs.map((n, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => openChat?.(n.from_user_id, n.from_name)}
+              className="flex w-full items-center gap-3 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-5 py-3 text-left transition hover:bg-cyan-500/20"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-cyan-400 text-xs font-black text-slate-950">{n.count}</span>
+              <div>
+                <p className="text-sm font-bold text-white">Message from {n.from_name}</p>
+                <p className="text-xs text-cyan-200">Click to open chat</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Dashboard Sidebar Layout ── */}
       <div className="flex flex-row gap-6">
@@ -1862,6 +1513,16 @@ function DashboardPage({
                 </button>
               ))}
             </nav>
+            {availableDashboards?.length > 1 && (
+              <div className="border-t border-white/10 p-2">
+                <p className="px-3 pb-1 text-[10px] font-black uppercase tracking-widest text-slate-600">Switch dashboard</p>
+                {availableDashboards.map((item) => (
+                  <button key={item.role} type="button" onClick={() => onSwitchDashboard?.(item.role)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-xs font-bold text-cyan-300 transition hover:bg-cyan-500/10">
+                    {item.role === "teacher" ? "Coach dashboard" : "Parent dashboard"}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="border-t border-white/10 p-2">
               <button type="button" onClick={logout}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-rose-400 transition hover:bg-rose-500/10"
@@ -1956,7 +1617,7 @@ function DashboardPage({
             </div>
             <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">
               {isTeacher
-                ? "Teacher · Tracking learners, updating IEPs, and sending focused guidance."
+                ? "Coach · Tracking learners, updating IEPs, and sending focused guidance."
                 : isParent
                   ? "Parent · Account balance, messages, and learner support hub."
                   : "Student · Learning progress, balance, and premium services."}
@@ -2067,7 +1728,7 @@ function DashboardPage({
           {/* Teacher: student roster */}
           {isTeacher && (
             <GlassPanel className="p-6 sm:p-8">
-              <SectionLabel>Teacher Tools</SectionLabel>
+              <SectionLabel>Coach Tools</SectionLabel>
               <h3 className="mt-2 text-xl font-black text-white">Learner Roster</h3>
               <div className="mt-6 overflow-x-auto rounded-2xl border border-white/5 bg-slate-950/50">
                 <table className="w-full text-left text-sm">
@@ -2173,7 +1834,7 @@ function DashboardPage({
                 >
                   <div className="rounded-xl bg-emerald-500/10 p-3"><FaEnvelope className="text-lg text-emerald-300" /></div>
                   <div>
-                    <p className="font-bold text-white">Contact Teacher</p>
+                    <p className="font-bold text-white">Contact Coach</p>
                     <p className="text-xs text-slate-500">Send a message</p>
                   </div>
                 </button>
@@ -2182,7 +1843,7 @@ function DashboardPage({
           )}
 
           {/* Tournament standings */}
-          {hasTournament && (
+          {false && hasTournament && (
             <GlassPanel className="p-6 sm:p-8">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -2470,7 +2131,7 @@ function DashboardPage({
           {/* ROSTER section (teacher) */}
           {activeSection === "roster" && (
             <GlassPanel className="p-6 sm:p-8">
-              <SectionLabel>Teacher Tools</SectionLabel>
+              <SectionLabel>Coach Tools</SectionLabel>
               <h3 className="mt-2 mb-6 text-2xl font-black text-white">Learner Roster</h3>
               <div className="overflow-hidden rounded-2xl border border-white/5 bg-slate-950/50">
                 <table className="w-full text-left text-sm">
@@ -2565,7 +2226,7 @@ function DashboardPage({
                 <div className="mt-6 grid gap-4 sm:grid-cols-2">
                   <div className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-6">
                     <div className="rounded-xl bg-emerald-500/10 p-4"><FaEnvelope className="text-2xl text-emerald-300" /></div>
-                    <div><p className="font-bold text-white">Contact Teacher</p><p className="mt-1 text-sm text-slate-500">Send a direct message</p></div>
+                    <div><p className="font-bold text-white">Contact Coach</p><p className="mt-1 text-sm text-slate-500">Send a direct message</p></div>
                   </div>
                 </div>
               </GlassPanel>
@@ -2574,7 +2235,7 @@ function DashboardPage({
 
           {/* REGISTER CHILD section (parent) */}
           {activeSection === "register-child" && (
-            <ParentRegisterChildSection authHeaders={authHeaders} />
+            <ParentRegisterChildSection authHeaders={authHeaders} onRefresh={onRefresh} />
           )}
 
           {/* MATERIALS section (parent) */}
@@ -2592,7 +2253,7 @@ function DashboardPage({
           )}
 
           {/* TOURNAMENT section */}
-          {activeSection === "tournament" && (
+          {false && activeSection === "tournament" && (
             <GlassPanel className="p-6 sm:p-8">
               <div className="mb-6 flex items-center justify-between gap-4">
                 <div><SectionLabel>E-Sports</SectionLabel><h3 className="mt-2 text-2xl font-black text-white">{tournamentInfo.title}</h3></div>
@@ -2829,37 +2490,11 @@ function DashboardPage({
                 {/* Deposit tab */}
                 {profileTab === "deposit" && (
                   <form className="space-y-5 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-6" onSubmit={submitDeposit}>
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-cyan-400">Deposit via M-Pesa</p>
-                      <div className="mt-3 flex items-center gap-3 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3">
-                        <FaWallet className="flex-shrink-0 text-lg text-cyan-300" />
-                        <p className="text-sm font-bold text-cyan-100">Send to this M-Pesa Till: <span className="font-black text-white">7581346</span></p>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Paste your M-Pesa message here</label>
-                      <textarea
-                        rows={5}
-                        value={depositForm.mpesaMessage}
-                        onChange={(e) => setDepositForm({ mpesaMessage: e.target.value })}
-                        placeholder="e.g. SBT45XQG Confirmed. Ksh500.00 sent to QOOHI LTD 7581346 on 29/6/25..."
-                        className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/60 placeholder-slate-600 resize-none"
-                        required
-                      />
-                    </div>
-                    {depositResult && (
-                      <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-4 text-sm">
-                        <p className="font-black uppercase tracking-widest text-emerald-300 mb-2">✓ Credited!</p>
-                        <p className="text-emerald-100">Ksh <span className="font-black">{Number(depositResult.amount || 0).toLocaleString()}</span> has been added to your balance.</p>
-                        {depositResult.transactionCode && <p className="mt-1 text-xs text-emerald-300">Ref: {depositResult.transactionCode}</p>}
-                      </div>
-                    )}
-                    <div className="flex gap-3 pt-2">
-                      <ActionButton type="submit" disabled={submittingDeposit} className="!px-6 !py-3 !text-sm">
-                        {submittingDeposit ? "Processing..." : "Submit M-Pesa Message"}
-                      </ActionButton>
-                      <SecondaryButton type="button" className="!px-6 !py-3 !text-sm" onClick={() => { setProfileTab("view"); setDepositResult(null); }}>Cancel</SecondaryButton>
-                    </div>
+                    <div><p className="text-xs font-black uppercase tracking-widest text-cyan-400">Add money to wallet</p><h3 className="mt-2 text-2xl font-black text-white">M-Pesa STK Push</h3><p className="mt-2 text-sm leading-6 text-slate-400">Enter your M-Pesa number and amount. A payment prompt will appear on your phone for PIN confirmation.</p></div>
+                    <Input label="M-Pesa phone number" type="tel" value={depositForm.phone} onChange={(v) => setDepositForm((c) => ({ ...c, phone: v }))} />
+                    <Input label="Amount (Ksh)" type="number" value={depositForm.amount} onChange={(v) => setDepositForm((c) => ({ ...c, amount: v }))} />
+                    {depositResult && <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-4 text-sm text-emerald-100"><p className="font-black uppercase tracking-widest text-emerald-300">STK prompt sent</p><p className="mt-1">Check your phone and enter your M-Pesa PIN. Your wallet will update after payment confirmation.</p>{depositResult.checkoutRequestId && <p className="mt-1 text-xs text-emerald-300">Request: {depositResult.checkoutRequestId}</p>}</div>}
+                    <div className="flex gap-3 pt-2"><ActionButton type="submit" disabled={submittingDeposit || !depositForm.phone || !depositForm.amount} className="!px-6 !py-3 !text-sm">{submittingDeposit ? "Sending prompt..." : "Send STK Push"}</ActionButton><SecondaryButton type="button" className="!px-6 !py-3 !text-sm" onClick={() => { setProfileTab("view"); setDepositResult(null); }}>Cancel</SecondaryButton></div>
                   </form>
                 )}
 
@@ -2890,7 +2525,7 @@ function DashboardPage({
   );
 }
 
-function ParentRegisterChildSection({ authHeaders }) {
+function ParentRegisterChildSection({ authHeaders, onRefresh }) {
   const [childName, setChildName] = useState("");
   const [gradeLevel, setGradeLevel] = useState("");
   const [goals, setGoals] = useState("");
@@ -2914,6 +2549,7 @@ function ParentRegisterChildSection({ authHeaders }) {
       setChildName("");
       setGradeLevel("");
       setGoals("");
+      await onRefresh?.();
       setStatus("Child registered successfully!");
     } catch (err) {
       setStatus(err.message);
@@ -2993,7 +2629,7 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
   const [openTeacherPanel, setOpenTeacherPanel] = useState(null);
   const [teacherResults, setTeacherResults] = useState({});
   const [topicGuides, setTopicGuides] = useState({});
-
+  const [downloadingImg, setDownloadingImg] = useState(null);
   const subjects = getSubjectsForGrade(grade);
 
   const gradeRef = useRef(grade);
@@ -3218,7 +2854,32 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
               Generating image...
             </div>
           ) : searchedImage.url ? (
-            <img src={searchedImage.url} alt={searchedImage.topic} className="w-full object-cover" style={{ maxHeight: 280 }} />
+            <div className="overflow-hidden rounded-2xl border border-white/10">
+              <img src={searchedImage.url} alt={searchedImage.topic} className="w-full object-cover" style={{ maxHeight: 280 }} />
+              <button
+                type="button"
+                onClick={async () => {
+                  setDownloadingImg("search");
+                  try {
+                    const resp = await fetch("/api/ai/image/download", {
+                      method: "POST", headers: chatHeaders,
+                      body: JSON.stringify({ imageUrl: searchedImage.url }),
+                    });
+                    if (resp.ok) {
+                      const blob = await resp.blob(); const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a"); a.href = url;
+                      a.download = `${searchedImage.topic.toLowerCase().replace(/\s+/g, "-")}.${blob.type.split("/").pop() || "png"}`;
+                      a.click(); URL.revokeObjectURL(url);
+                    } else { const err = await resp.json(); alert(err.error || "Download failed"); }
+                  } catch (e) { alert(e.message); }
+                  setDownloadingImg(null);
+                }}
+                disabled={downloadingImg === "search"}
+                className="w-full border-t border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300 hover:bg-white/10 disabled:opacity-50"
+              >
+                {downloadingImg === "search" ? "Downloading..." : "⬇ Download Image (10 KSH)"}
+              </button>
+            </div>
           ) : (
             <p className="px-4 py-4 text-sm text-rose-400">{searchedImage.error || "Could not generate image."}</p>
           )}
@@ -3264,6 +2925,35 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
                     {subjectImages[subject] && (
                       <div className="mt-3 overflow-hidden rounded-2xl border border-white/10">
                         <img src={subjectImages[subject]} alt={`${subject} illustration`} className="w-full object-cover" style={{ aspectRatio: "16/9" }} />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setDownloadingImg(subject);
+                            try {
+                              const resp = await fetch("/api/ai/image/download", {
+                                method: "POST", headers: chatHeaders,
+                                body: JSON.stringify({ imageUrl: subjectImages[subject] }),
+                              });
+                              if (resp.ok) {
+                                const blob = await resp.blob();
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement("a");
+                                a.href = url;
+                                a.download = `${subject.toLowerCase().replace(/\s+/g, "-")}.${blob.type.split("/").pop() || "png"}`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                              } else {
+                                const err = await resp.json();
+                                alert(err.error || "Download failed");
+                              }
+                            } catch (e) { alert(e.message); }
+                            setDownloadingImg(null);
+                          }}
+                          disabled={downloadingImg === subject}
+                          className="w-full border-t border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300 transition hover:bg-white/10 disabled:opacity-50"
+                        >
+                          {downloadingImg === subject ? "Downloading..." : `⬇ Download Image (10 KSH)`}
+                        </button>
                       </div>
                     )}
                     <div className="mt-3 flex gap-2">
@@ -3296,14 +2986,14 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
                       <div className="mt-3 space-y-3 rounded-2xl border border-cyan-400/20 bg-slate-900/80 p-4">
                         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400">Teaching Options — 20 KSH each</p>
 
-                        {/* Best Teacher */}
+                        {/* Best Coach */}
                         <button
                           type="button"
                           onClick={() => fetchTeacherSuggest(subject)}
                           disabled={teacherResults[subject]?.loading}
                           className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-left text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
                         >
-                          {teacherResults[subject]?.loading ? "🔍 Finding best teacher…" : "🧑‍🏫 Find Best Teacher (20 KSH)"}
+                          {teacherResults[subject]?.loading ? "🔍 Finding best coach…" : "🧑‍🏫 Find Best Coach (20 KSH)"}
                         </button>
                         {teacherResults[subject]?.error && (
                           <p className="text-xs text-rose-400">{teacherResults[subject].error}</p>
@@ -3315,14 +3005,22 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
                             {teacherResults[subject].teacher.specializations && (
                               <p className="text-slate-500">Specializes in: {teacherResults[subject].teacher.specializations}</p>
                             )}
-                            <a
-                              href={`https://wa.me/${String(teacherResults[subject].teacher.whatsapp || "").replace(/\D/g, "")}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="mt-1 inline-block rounded-full border border-green-400/30 bg-green-400/10 px-3 py-1 text-green-300 transition hover:bg-green-400/20"
-                            >
-                              WhatsApp Teacher →
-                            </a>
+                            <div className="mt-2 flex gap-2">
+                              <a
+                                href={`https://wa.me/${String(teacherResults[subject].teacher.whatsapp || "").replace(/\D/g, "")}`}
+                                target="_blank" rel="noopener noreferrer"
+                                className="flex-1 rounded-full border border-green-400/30 bg-green-400/10 px-3 py-1 text-center text-green-300 transition hover:bg-green-400/20"
+                              >
+                                WhatsApp →
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => openChat(teacherResults[subject].teacher.id, teacherResults[subject].teacher.name)}
+                                className="flex-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-center text-cyan-300 transition hover:bg-cyan-400/20"
+                              >
+                                💬 Chat
+                              </button>
+                            </div>
                           </div>
                         )}
                         {teacherResults[subject]?.teacher === null && teacherResults[subject]?.reason && !teacherResults[subject]?.loading && (
@@ -3386,9 +3084,9 @@ function TeacherSpecializationsSection({ authHeaders, initialSpecs = "" }) {
 
   return (
     <GlassPanel className="p-6 sm:p-8">
-      <SectionLabel>Teacher Profile</SectionLabel>
+      <SectionLabel>Coach Profile</SectionLabel>
       <h3 className="mt-2 mb-4 text-2xl font-black text-white">Add Specializations</h3>
-      <p className="mb-6 text-sm text-slate-400 max-w-xl">List the subjects and CBC strands you specialise in. This helps parents and students find the right teacher.</p>
+      <p className="mb-6 text-sm text-slate-400 max-w-xl">List the subjects and CBC strands you specialise in. This helps parents and students find the right coach.</p>
       <form onSubmit={save} className="space-y-4 max-w-xl">
         <div>
           <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Your Specializations</label>
@@ -3410,8 +3108,7 @@ function TeacherSpecializationsSection({ authHeaders, initialSpecs = "" }) {
   );
 }
 
-function PageStack({ title, subtitle, children, voiceScript, compact = false }) {
-  const { voiceEnabled, toggleVoice, isSpeaking } = useVoiceGuide(voiceScript);
+function PageStack({ title, subtitle, children, compact = false }) {
 
   return (
     <div className="space-y-12">
@@ -3439,25 +3136,6 @@ function PageStack({ title, subtitle, children, voiceScript, compact = false }) 
             </p>
           )}
         </div>
-
-        {voiceScript && (
-          <button
-            onClick={toggleVoice}
-            className={`flex items-center gap-3 rounded-2xl border px-6 py-4 transition-all active:scale-95 ${
-              voiceEnabled
-                ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.2)]"
-                : "border-white/10 bg-white/5 text-slate-500"
-            }`}
-          >
-            <div className="relative flex h-3 w-3">
-              {(voiceEnabled || isSpeaking) && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75"></span>}
-              <span className={`relative inline-flex h-3 w-3 rounded-full ${voiceEnabled ? "bg-cyan-400" : "bg-slate-600"}`}></span>
-            </div>
-            <span className="text-xs font-black uppercase tracking-widest">
-              {isSpeaking ? "Speaking..." : voiceEnabled ? "Voice Guide On" : "Voice Guide Off"}
-            </span>
-          </button>
-        )}
       </div>
       {children}
     </div>
@@ -3542,6 +3220,7 @@ function Input({ label, value, onChange, type = "text" }) {
       <input
         type={type}
         value={value}
+        placeholder={label}
         onChange={(event) => onChange(event.target.value)}
         className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-5 py-4 text-lg text-white outline-none transition focus:border-cyan-300/60"
       />
@@ -3596,7 +3275,7 @@ function SectionLabel({ children }) {
 
 function getRouteFromHash() {
   if (typeof window === "undefined") return "home";
-  return window.location.hash.replace("#", "").trim() || "home";
+  return window.location.hash.replace("#", "").split("?")[0].trim() || "home";
 }
 
 async function fetchJson(path, options = {}) {
@@ -3614,7 +3293,7 @@ async function fetchJson(path, options = {}) {
   return data;
 }
 
-function Footer({ goTo }) {
+function Footer({ goTo, openParentRegistration }) {
   return (
     <footer className="fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-slate-950/80 py-4 backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -3632,10 +3311,10 @@ function Footer({ goTo }) {
 
         {/* Center: Quick Links (Desktop) */}
         <div className="hidden items-center gap-6 md:flex">
-          {["iep", "teachers", "resources", "learn", "games"].map((id) => (
+          {["iep"].map((id) => (
             <button
               key={id}
-              onClick={() => goTo(id)}
+              onClick={() => id === "iep" ? openParentRegistration() : goTo(id)}
               className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 transition hover:text-cyan-400"
             >
               {id === "iep" ? "Learner IEP" : id}
@@ -3681,52 +3360,22 @@ function StreamingText({ text, speed = 20 }) {
 }
 
 function QoohiAIPage({ sessionToken }) {
-  const voiceScript = "Welcome to QOOHI AI. I am your smart assistant, here to help you learn, build, and create. Ask me anything, or choose a specialized service like CV and Resume generation. I am here to support your journey.";
 
   const aiSessionId = useMemo(() => {
     const saved = localStorage.getItem("qoohi_ai_session_id");
-    if (saved) {
-      return saved;
-    }
+    if (saved) return saved;
     const created = crypto.randomUUID();
     localStorage.setItem("qoohi_ai_session_id", created);
     return created;
   }, []);
-  const [messages, setMessages] = useState([
-    {
-      role: "assistant",
-      content: "Choose a service below to continue.",
-    },
-  ]);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [editingIndex, setEditingIndex] = useState(null);
   const [editText, setEditText] = useState("");
-  const [selectedService, setSelectedService] = useState("");
-  const [showServiceButtons, setShowServiceButtons] = useState(true);
-  const [resumeFlow, setResumeFlow] = useState({
-    step: "payment",
-    paymentProof: "",
-    name: "",
-    location: "",
-    email: "",
-    phone: "",
-    skill: "",
-    workExperience: "",
-    school: "",
-    areaOfStudy: "",
-    preview: "",
-    filename: "",
-    downloadUrl: "",
-  });
-
-  const authHeaders = sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
-
-  useEffect(() => () => {
-    if (resumeFlow.downloadUrl) {
-      URL.revokeObjectURL(resumeFlow.downloadUrl);
-    }
-  }, [resumeFlow.downloadUrl]);
+  
+  const [streamingContent, setStreamingContent] = useState("");
+  const streamingContentRef = useRef("");
 
   const appendMessage = (message) => {
     setMessages((prev) => [...prev, message]);
@@ -3740,29 +3389,6 @@ function QoohiAIPage({ sessionToken }) {
     }
   };
 
-  const speakMessage = (text) => {
-    if (!window.speechSynthesis) return;
-    const synth = window.speechSynthesis;
-    synth.cancel();
-    synth.resume();
-    
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    
-    activeUtterances.add(utterance);
-    utterance.onend = () => activeUtterances.delete(utterance);
-    utterance.onerror = () => activeUtterances.delete(utterance);
-
-    const voices = synth.getVoices();
-    const female = pickFemaleVoice(voices);
-    if (female) utterance.voice = female;
-    
-    setTimeout(() => {
-      synth.speak(new SpeechSynthesisUtterance(""));
-      synth.speak(utterance);
-    }, 50);
-  };
-
   // ✏️ START EDIT
   const startEdit = (index, content) => {
     setEditingIndex(index);
@@ -3773,377 +3399,6 @@ function QoohiAIPage({ sessionToken }) {
   const cancelEdit = () => {
     setEditingIndex(null);
     setEditText("");
-  };
-
-  const startResumeFlow = () => {
-    setSelectedService("cv_resume");
-    setShowServiceButtons(false);
-    appendMessage({ role: "user", content: "CV/RESUME" });
-    appendMessage(
-      {
-        role: "assistant",
-        content:
-          "First pay 100KSH to Till number 7581346, then paste your M-PESA confirmation message here so I can verify it.",
-      },
-    );
-    setResumeFlow({
-      step: "payment",
-      paymentProof: "",
-      name: "",
-      location: "",
-      email: "",
-      phone: "",
-      skill: "",
-      workExperience: "",
-      school: "",
-      areaOfStudy: "",
-      preview: "",
-      filename: "",
-      downloadUrl: "",
-    });
-  };
-
-  const startCyberFlow = () => {
-    const whatsappLink = "https://wa.me/254712508450?text=Hello%20QOOHI%2C%20I%20need%20cyber%20online%20services.";
-    setSelectedService("cyber_services");
-    setShowServiceButtons(false);
-    appendMessage({ role: "user", content: "CYBER ONLINE SERVICES" });
-    appendMessage(
-      {
-        role: "assistant",
-        content:
-          "We offer the following services:\n\n1. SHA REGISTRATION\n2. TSC NUMBER REGISTRATIONS\n3. ALL ECITIZEN SERVICES\n4. DRIVING LICENSE APPLICATIONS\n5. GREEN CARD APPLICATION\n\nShare your information on WhatsApp here:\n" +
-          whatsappLink,
-      },
-    );
-  };
-
-  const generateResumePreview = async (payload) => {
-    const response = await fetch(`${API_BASE}/api/ai/resume/generate`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeaders,
-      },
-      body: JSON.stringify({
-        sessionId: aiSessionId,
-        name: payload.name,
-        location: payload.location,
-        email: payload.email,
-        phone: payload.phone,
-        skill: payload.skill,
-        workExperience: payload.workExperience,
-        school: payload.school,
-        areaOfStudy: payload.areaOfStudy,
-        feedback: payload.feedback,
-      }),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.resume) {
-      throw new Error(data.error || "Failed to generate resume.");
-    }
-    return data;
-  };
-
-  const buildResumeDocument = (name, resumeText) => {
-    const safeName = String(name || "Resume");
-    const escaped = resumeText
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/\n/g, "<br />");
-
-    return `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <title>${safeName} Resume</title>
-        </head>
-        <body style="font-family: -apple-system, system-ui, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Fira Sans', Ubuntu, Oxygen, 'Oxygen Sans', Cantarell, 'Droid Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Lucida Grande', Helvetica, Arial, sans-serif; line-height: 1.5; padding: 32px; color: #111827;">
-          <h1 style="margin-bottom: 24px;">${safeName}</h1>
-          <div>${escaped}</div>
-        </body>
-      </html>
-    `;
-  };
-
-  const createResumeDownload = (name, resumeText, filename) => {
-    if (resumeFlow.downloadUrl) {
-      URL.revokeObjectURL(resumeFlow.downloadUrl);
-    }
-    const blob = new Blob([buildResumeDocument(name, resumeText)], {
-      type: "application/msword",
-    });
-    return {
-      filename: filename || `${name || "resume"}-qoohi-resume.doc`,
-      downloadUrl: URL.createObjectURL(blob),
-    };
-  };
-
-  const handleResumeInput = async (text) => {
-    if (resumeFlow.step === "payment") {
-      const looksVerified =
-        /confirmed/i.test(text) &&
-        /ksh\s*100/i.test(text);
-
-      if (!looksVerified) {
-        appendMessage(
-          {
-            role: "assistant",
-            content:
-              "I could not verify that payment message yet. Please paste the full M-PESA confirmation showing Ksh100.00 paid to Till number 7581346.",
-          },
-        );
-        return;
-      }
-
-      setResumeFlow((prev) => ({
-        ...prev,
-        step: "name",
-        paymentProof: text,
-      }));
-      appendMessage(
-        {
-          role: "assistant",
-          content: "Payment verified. Share your full name.",
-        },
-      );
-      return;
-    }
-
-    if (resumeFlow.step === "name") {
-      setResumeFlow((prev) => ({
-        ...prev,
-        step: "location",
-        name: text,
-      }));
-      appendMessage(
-        {
-          role: "assistant",
-          content: "Share your location.",
-        },
-      );
-      return;
-    }
-
-    if (resumeFlow.step === "location") {
-      setResumeFlow((prev) => ({
-        ...prev,
-        step: "email",
-        location: text,
-      }));
-      appendMessage(
-        {
-          role: "assistant",
-          content: "Share your email address.",
-        },
-      );
-      return;
-    }
-
-    if (resumeFlow.step === "email") {
-      setResumeFlow((prev) => ({
-        ...prev,
-        step: "phone",
-        email: text,
-      }));
-      appendMessage(
-        {
-          role: "assistant",
-          content: "Share your phone number.",
-        },
-      );
-      return;
-    }
-
-    if (resumeFlow.step === "phone") {
-      setResumeFlow((prev) => ({
-        ...prev,
-        step: "skill",
-        phone: text,
-      }));
-      appendMessage(
-        {
-          role: "assistant",
-          content: "Share your main professional skill.",
-        },
-      );
-      return;
-    }
-
-    if (resumeFlow.step === "skill") {
-      setResumeFlow((prev) => ({
-        ...prev,
-        step: "workExperience",
-        skill: text,
-      }));
-      appendMessage(
-        {
-          role: "assistant",
-          content: "Share your work experience.",
-        },
-      );
-      return;
-    }
-
-    if (resumeFlow.step === "workExperience") {
-      setResumeFlow((prev) => ({
-        ...prev,
-        step: "school",
-        workExperience: text,
-      }));
-      appendMessage(
-        {
-          role: "assistant",
-          content: "Share your school.",
-        },
-      );
-      return;
-    }
-
-    if (resumeFlow.step === "school") {
-      setResumeFlow((prev) => ({
-        ...prev,
-        step: "areaOfStudy",
-        school: text,
-      }));
-      appendMessage(
-        {
-          role: "assistant",
-          content: "Share your area of study.",
-        },
-      );
-      return;
-    }
-
-    if (resumeFlow.step === "areaOfStudy") {
-      setLoading(true);
-      try {
-        const nextFlow = {
-          ...resumeFlow,
-          areaOfStudy: text,
-        };
-        const data = await generateResumePreview({
-          name: nextFlow.name,
-          location: nextFlow.location,
-          email: nextFlow.email,
-          phone: nextFlow.phone,
-          skill: nextFlow.skill,
-          workExperience: nextFlow.workExperience,
-          school: nextFlow.school,
-          areaOfStudy: text,
-        });
-
-        setResumeFlow((prev) => ({
-          ...prev,
-          step: "confirm",
-          areaOfStudy: text,
-          preview: data.resume,
-          filename: data.filename,
-        }));
-        appendMessage(
-          {
-            role: "assistant",
-            content:
-              `Here is your professionally prepared resume draft:\n\n${data.resume}\n\nIf you are okay with it, reply yes. If you want changes, tell me what to adjust.`,
-          },
-        );
-      } catch {
-        appendMessage(
-          {
-            role: "assistant",
-            content: "I could not generate the resume right now. Check the OpenAI backend settings and try again.",
-          },
-        );
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (resumeFlow.step === "confirm") {
-      const approved = /\b(yes|ok|okay|looks good|good|proceed|continue)\b/i.test(text);
-
-      if (approved) {
-        const download = createResumeDownload(
-          resumeFlow.name,
-          resumeFlow.preview,
-          resumeFlow.filename,
-        );
-        setResumeFlow((prev) => ({
-          ...prev,
-          step: "done",
-          filename: download.filename,
-          downloadUrl: download.downloadUrl,
-        }));
-        appendMessage(
-          {
-            role: "assistant",
-            content: "Your Word file is ready. Click the download button below.",
-          },
-        );
-        return;
-      }
-
-      setResumeFlow((prev) => ({
-        ...prev,
-        step: "feedback",
-      }));
-      appendMessage(
-        {
-          role: "assistant",
-          content: "Tell me what to change in the resume and I will generate another version.",
-        },
-      );
-      return;
-    }
-
-    if (resumeFlow.step === "feedback") {
-      setLoading(true);
-      try {
-        const data = await generateResumePreview({
-          name: resumeFlow.name,
-          location: resumeFlow.location,
-          email: resumeFlow.email,
-          phone: resumeFlow.phone,
-          skill: resumeFlow.skill,
-          workExperience: resumeFlow.workExperience,
-          school: resumeFlow.school,
-          areaOfStudy: resumeFlow.areaOfStudy,
-          feedback: text,
-        });
-        setResumeFlow((prev) => ({
-          ...prev,
-          step: "confirm",
-          preview: data.resume,
-          filename: data.filename,
-        }));
-        appendMessage(
-          {
-            role: "assistant",
-            content:
-              `Updated professional resume draft:\n\n${data.resume}\n\nReply yes if this one is okay, or send more changes.`,
-          },
-        );
-      } catch {
-        appendMessage(
-          {
-            role: "assistant",
-            content: "I could not update the resume right now. Try again after the OpenAI API is configured.",
-          },
-        );
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
-    appendMessage(
-      {
-        role: "assistant",
-        content: "Your resume is ready. Use the download button below or start over to create another one.",
-      },
-    );
   };
 
   const sendMessage = async (overrideMessages) => {
@@ -4185,16 +3440,13 @@ function QoohiAIPage({ sessionToken }) {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
 
-    if (selectedService === "cv_resume") {
-      await handleResumeInput(trimmedInput);
-      return;
-    }
-
     const finalMessages = [...messages, userMessage];
     setLoading(true);
+    setStreamingContent("");
+    streamingContentRef.current = "";
 
     try {
-      const res = await fetch(`${API_BASE}/api/ai/chat`, {
+      const res = await fetch(`${API_BASE}/api/ai/stream`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -4203,26 +3455,83 @@ function QoohiAIPage({ sessionToken }) {
         body: JSON.stringify({ messages: finalMessages }),
       });
 
-      const data = await res.json();
-
-      const reply = data?.reply;
-
-      if (!reply) throw new Error("No reply");
-
-      appendMessage({ role: "assistant", content: reply });
-      if (!selectedService) {
-        setSelectedService("general");
+      if (!res.ok) {
+        if (res.status === 402) {
+          const errData = await res.json().catch(() => ({}));
+          appendMessage({
+            role: "assistant",
+            content: "⚠️ " + (errData.error || "Insufficient balance. Please deposit funds to continue.") + "\n\nTop up from your Dashboard to unlock AI chat.",
+          });
+          setLoading(false);
+          return;
+        }
+        throw new Error("Stream error: " + res.status);
       }
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          const lines = part.split("\n");
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const data = line.slice(6).trim();
+              if (data === "[DONE]") continue;
+              try {
+                const parsed = JSON.parse(data);
+                const delta = parsed.choices?.[0]?.delta?.content || "";
+                if (delta) {
+                  streamingContentRef.current += delta;
+                  setStreamingContent(streamingContentRef.current);
+                }
+              } catch {}
+            }
+          }
+        }
+      }
+
+      const finalContent = streamingContentRef.current;
+      if (finalContent) {
+        appendMessage({ role: "assistant", content: finalContent });
+      }
+      setStreamingContent("");
+      streamingContentRef.current = "";
+      } catch {
+      try {
+        const fallbackRes = await fetch(`${API_BASE}/api/ai/chat`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeaders,
+          },
+          body: JSON.stringify({ messages: finalMessages }),
+        });
+        const fallbackData = await fallbackRes.json();
+        const reply = fallbackData?.reply;
+        if (reply) {
+          appendMessage({ role: "assistant", content: reply });
+        } else {
+          throw new Error("No reply");
+        }
+      } catch {
+        appendMessage({
           role: "assistant",
           content: "⚠️ AI error. Please try again.",
-        },
-      ]);
+        });
+      }
     } finally {
       setLoading(false);
+      setStreamingContent("");
+      streamingContentRef.current = "";
     }
   };
 
@@ -4247,32 +3556,10 @@ function QoohiAIPage({ sessionToken }) {
     <PageStack
       title="QOOHI AI"
       subtitle="Ask anything. Learn. Build. Create."
-      voiceScript={voiceScript}
     >
       <GlassPanel className="flex h-[70vh] flex-col p-4">
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
-          {showServiceButtons && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <button
-                onClick={startResumeFlow}
-                className="rounded-2xl border border-cyan-300/30 bg-cyan-300/10 p-5 text-left transition hover:bg-cyan-300/20"
-              >
-                <p className="text-xs font-bold uppercase tracking-[0.24em] text-cyan-200">
-                  Service 1
-                </p>
-                <h3 className="mt-2 text-xl font-black text-white">CV/RESUME</h3>
-              </button>
-              <button
-                onClick={startCyberFlow}
-                className="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 p-5 text-left transition hover:bg-emerald-300/20"
-              >
-                <p className="text-xs font-bold uppercase tracking-[0.24em] text-emerald-200">
-                  Service 2
-                </p>
-                <h3 className="mt-2 text-xl font-black text-white">CYBER ONLINE SERVICES</h3>
-              </button>
-            </div>
-          )}
+          
 
           {messages.map((msg, index) => (
             <div
@@ -4316,11 +3603,7 @@ function QoohiAIPage({ sessionToken }) {
                 ) : (
                   <>
                     <div className="whitespace-pre-wrap leading-relaxed">
-                      {msg.role === "assistant" && index === messages.length - 1 && !loading ? (
-                        <StreamingText text={msg.content} />
-                      ) : (
-                        msg.content
-                      )}
+                      {msg.content}
                     </div>
                     
                     <div className="absolute top-0 flex items-center gap-1 opacity-0 transition-all group-hover:opacity-100 py-1.5 px-3 bg-slate-950/90 border border-white/10 backdrop-blur-md rounded-2xl shadow-2xl z-20 -top-10 left-0">
@@ -4331,14 +3614,7 @@ function QoohiAIPage({ sessionToken }) {
                       >
                         <FaLink className="text-xs" />
                       </button>
-                      <button
-                        onClick={() => speakMessage(msg.content)}
-                        className="p-1.5 text-slate-400 hover:text-cyan-400 transition"
-                        title="Speak"
-                      >
-                        <FaRobot className="text-xs" />
-                      </button>
-                      {msg.role === "user" && selectedService !== "cv_resume" && (
+                      {msg.role === "user" && (
                         <button
                           onClick={() => startEdit(index, msg.content)}
                           className="p-1.5 text-slate-400 hover:text-cyan-400 transition"
@@ -4354,28 +3630,16 @@ function QoohiAIPage({ sessionToken }) {
             </div>
           ))}
 
-          {selectedService === "cyber_services" && (
-            <a
-              href="https://wa.me/254712508450?text=Hello%20QOOHI%2C%20I%20need%20cyber%20online%20services."
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex w-fit rounded-xl bg-emerald-400 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-emerald-300"
-            >
-              Open WhatsApp
-            </a>
-          )}
+          
 
-          {resumeFlow.downloadUrl && (
-            <a
-              href={resumeFlow.downloadUrl}
-              download={resumeFlow.filename}
-              className="inline-flex w-fit rounded-xl bg-cyan-400 px-4 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-300"
-            >
-              Download Resume
-            </a>
+          {streamingContent && (
+            <div className="flex justify-start">
+              <div className="group relative max-w-[85%] rounded-[1.5rem] px-5 py-4 text-[14px] font-medium leading-relaxed transition-all shadow-xl sm:max-w-[70%] bg-slate-900/80 backdrop-blur-xl text-white border border-white/10 rounded-tl-none shadow-black/40">
+                <div className="whitespace-pre-wrap leading-relaxed">{streamingContent}</div>
+              </div>
+            </div>
           )}
-
-          {loading && (
+          {loading && !streamingContent && (
             <div className="text-sm text-cyan-300">
               QOOHI AI is thinking...
             </div>
@@ -4385,11 +3649,7 @@ function QoohiAIPage({ sessionToken }) {
         <div className="flex items-center gap-2 border-t border-white/10 p-4">
           <input
             className="flex-1 rounded-xl bg-slate-950/60 px-4 py-3 text-white outline-none"
-            placeholder={
-              selectedService === "cv_resume"
-                ? "Type your response for the resume process..."
-                : "Type your message..."
-            }
+            placeholder="Type your message..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) =>

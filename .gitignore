@@ -12,7 +12,6 @@ dist
 dist-ssr
 *.local
 .env
-.wrangler
 *.db
 *.db-shm
 *.db-wal
@@ -31,4 +30,7 @@ dist-ssr
 # Don't cache gh-pages deployment cache
 .cache
 node_modules/
+backend/target/
+dist.bak/
 node_modules/
+client_secret_*.json

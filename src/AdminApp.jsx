@@ -21,12 +21,13 @@ import {
   FaUsers,
   FaWallet,
 } from "react-icons/fa";
-import bg1 from "./background/pexels-pixabay-356056.jpg";
-import bg2 from "./background/pexels-veeterzy-303383.jpg";
-import bg3 from "./background/pexels-francesco-ungaro-673648.jpg";
-import bg4 from "./background/pexels-enginakyurt-1435752.jpg";
-import bg5 from "./background/pexels-pixabay-268533.jpg";
-import bg6 from "./background/pexels-pixabay-531880.jpg";
+import QoohiLogo from "./assets/qoohiLogo.jpeg";
+const bg1 = QoohiLogo;
+const bg2 = QoohiLogo;
+const bg3 = QoohiLogo;
+const bg4 = QoohiLogo;
+const bg5 = QoohiLogo;
+const bg6 = QoohiLogo;
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 
@@ -186,6 +187,8 @@ export default function AdminApp() {
   const [adminAuthError, setAdminAuthError] = useState("");
   const [sendingAdminCode, setSendingAdminCode] = useState(false);
   const [verifyingAdminCode, setVerifyingAdminCode] = useState(false);
+  const [checkingVerification, setCheckingVerification] = useState(false);
+  const [adminPendingEmail, setAdminPendingEmail] = useState("");
 
   const adminNav = [
     { id: "overview", Icon: FaShieldAlt, label: "Overview" },
@@ -194,7 +197,6 @@ export default function AdminApp() {
     { id: "deposits", Icon: FaCheck, label: "Deposits" },
     { id: "withdrawals", Icon: FaMoneyBillWave, label: "Withdrawals" },
     { id: "groups", Icon: FaUsers, label: "Groups" },
-    { id: "finance", Icon: FaSave, label: "Finance" },
     { id: "admins", Icon: FaUserShield, label: "Admins" },
   ];
   const backgroundImages = [bg1, bg2, bg3, bg4, bg5, bg6];
@@ -344,7 +346,7 @@ export default function AdminApp() {
     setRemovingAdminId(account.id);
     setAdminCreateError("");
     try {
-      await fetchJson(
+      const res = await fetchJson(
         "/api/admin/remove-account",
         adminKey,
         "POST",
@@ -356,7 +358,7 @@ export default function AdminApp() {
         name: account.name,
         email: account.email,
         accessKey: "",
-        message: `${account.name || account.email} was removed from admin access.`,
+        message: res.message || `${account.name || account.email} account deleted permanently.`,
       });
     } catch (err) {
       setAdminCreateError(err.message);
@@ -434,9 +436,9 @@ export default function AdminApp() {
         }),
       );
       if (data.pending) {
+        setAdminPendingEmail(adminAuthForm.email);
         setAdminAuthStatus(data.message || "Pending verification.");
-        setAdminAuthStage("form");
-        setAdminAuthForm({ fullName: "", email: "", code: "" });
+        setAdminAuthStage("pending");
         return;
       }
       localStorage.setItem("qoohi_admin_key", data.accessKey);
@@ -451,6 +453,34 @@ export default function AdminApp() {
       setAdminAuthError(err.message);
     } finally {
       setVerifyingAdminCode(false);
+    }
+  };
+
+  const checkAdminVerification = async () => {
+    setCheckingVerification(true);
+    setAdminAuthError("");
+    try {
+      const data = await fetchJson(
+        "/api/admin/auth/check-verification?email=" + encodeURIComponent(adminPendingEmail),
+        "",
+      );
+      if (data.ok && data.accessKey) {
+        localStorage.setItem("qoohi_admin_key", data.accessKey);
+        setAdminKey(data.accessKey);
+        setAdminVerified(true);
+        setAdminSection("overview");
+        setAdminAuthStage("form");
+        setAdminAuthForm({ fullName: "", email: "", code: "" });
+        setAdminAuthStatus("");
+        setAdminPendingEmail("");
+        await loadOverview(data.accessKey);
+      } else {
+        setAdminAuthStatus("Still pending. Try again after the superadmin has verified your account.");
+      }
+    } catch {
+      setAdminAuthStatus("Could not check status. You can try again or contact the superadmin.");
+    } finally {
+      setCheckingVerification(false);
     }
   };
 
@@ -702,8 +732,8 @@ export default function AdminApp() {
   const selectedBalanceUser = users.find((user) => String(user.id) === String(balanceForm.userId)) || null;
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
-      {backgroundImages.map((img, index) => (
+    <div className="app-light relative min-h-screen overflow-hidden bg-slate-100 text-slate-900">
+      {false && backgroundImages.map((img, index) => (
         <div
           key={index}
           className={`absolute inset-0 bg-cover bg-center transition-all duration-[3000ms] ${
@@ -770,7 +800,39 @@ export default function AdminApp() {
               </button>
             </div>
 
-            {adminAuthStage === "form" ? (
+            {adminAuthStage === "pending" ? (
+              <div className="space-y-4">
+                <div className="rounded-[1.25rem] border border-amber-300/20 bg-amber-400/10 px-4 py-6 text-center">
+                  <p className="text-lg font-black text-amber-100">Verification pending</p>
+                  {adminAuthStatus && (
+                    <p className="mt-3 text-sm text-amber-200/80">{adminAuthStatus}</p>
+                  )}
+                  <p className="mt-4 text-xs text-slate-400">Email: {adminPendingEmail}</p>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={checkAdminVerification}
+                    disabled={checkingVerification}
+                    className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <FaCheck /> {checkingVerification ? "Checking..." : "Check verification status"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdminAuthStage("form");
+                      setAdminPendingEmail("");
+                      setAdminAuthStatus("");
+                      setAdminAuthError("");
+                    }}
+                    className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                  >
+                    Use a different email
+                  </button>
+                </div>
+              </div>
+            ) : adminAuthStage === "form" ? (
               <form className="space-y-4" onSubmit={requestAdminCode}>
                 {adminAuthMode === "register" && (
                   <Field label="Full name">
@@ -1570,7 +1632,7 @@ export default function AdminApp() {
                                   disabled={removingAdminId === account.id}
                                   className="inline-flex items-center gap-2 rounded-full border border-rose-300/30 bg-rose-300/10 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-rose-100 transition hover:bg-rose-300/20 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                  <FaTrash /> {removingAdminId === account.id ? "Removing..." : "Remove"}
+                                  <FaTrash /> {removingAdminId === account.id ? "Deleting..." : "Delete"}
                                 </button>
                               )}
                             </div>
@@ -1590,7 +1652,7 @@ export default function AdminApp() {
                 )}
 
                 {/* FINANCE section */}
-                {adminSection === "finance" && (
+                {false && adminSection === "finance" && (
             <section className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>

@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: qoohi-backend
+    runtime: docker
+    rootDir: backend
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        value: https://qoohi-backend.onrender.com/api/auth/oauth/google/callback
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "465"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_SECURE
+        value: "true"
+      - key: FRONTEND_ORIGIN
+        value: https://qoohi-web.onrender.com
+      - key: USER_APP_URL
+        value: https://qoohi-web.onrender.com
+
+  - type: web
+    name: qoohi-web
+    runtime: static
+    buildCommand: npm ci && npm run build && npm run build:institution
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE
+        value: https://qoohi-backend.onrender.com

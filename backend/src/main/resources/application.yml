@@ -1,0 +1,35 @@
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+  sql.init.mode: always
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:465}
+    username: ${SMTP_USER:}
+    password: ${SMTP_PASS:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.ssl.enable: ${SMTP_SECURE:true}
+      mail.smtp.starttls.enable: ${SMTP_STARTTLS:false}
+qoohi:
+  frontend-origin: ${FRONTEND_ORIGIN:http://localhost:5000}
+  google-maps-api-key: ${GOOGLE_MAPS_API_KEY:}
+  places-api-key: ${GOOGLE_PLACES_API_KEY:${GOOGLE_MAPS_API_KEY:}}
+  otp-expiry-minutes: ${OTP_EXPIRY_MINUTES:10}
+  user-app-url: ${USER_APP_URL:http://localhost:5000}
+  google-client-id: ${GOOGLE_CLIENT_ID:}
+  google-client-secret: ${GOOGLE_CLIENT_SECRET:}
+  google-redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/auth/oauth/google/callback}
+  twilio:
+    account-sid: ${TWILIO_ACCOUNT_SID:}
+    auth-token: ${TWILIO_AUTH_TOKEN:}
+    whatsapp-from: ${TWILIO_WHATSAPP_FROM:}
+server:
+  port: ${PORT:8080}
+daraja:
+  base-url: ${MPESA_BASE_URL:https://sandbox.safaricom.co.ke}
+  consumer-key: ${MPESA_CONSUMER_KEY:}
+  consumer-secret: ${MPESA_CONSUMER_SECRET:}
+  short-code: ${MPESA_SHORT_CODE:}
+  passkey: ${MPESA_PASSKEY:}
+  callback-url: ${MPESA_CALLBACK_URL:http://localhost:8080/api/mpesa/callback}
