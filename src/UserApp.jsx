@@ -26,7 +26,6 @@ import {
   FaUsers,
   FaWallet,
   FaWhatsapp,
-  FaGoogle,
 } from "react-icons/fa";
 import QoohiLogo from "./assets/qoohiLogo.jpeg";
 const bg1 = QoohiLogo;
@@ -43,6 +42,17 @@ const aiTechImg = QoohiLogo;
 const iepImg = QoohiLogo;
 const libraryImg = QoohiLogo;
 const loginImg = QoohiLogo;
+
+function GoogleMark({ className = "h-5 w-5" }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path fill="#4285F4" d="M21.35 12.27c0-.72-.06-1.41-.18-2.07H12v3.92h5.24a4.48 4.48 0 0 1-1.94 2.94v2.45h3.14c1.84-1.69 2.91-4.18 2.91-7.24Z" />
+      <path fill="#34A853" d="M12 21.67c2.63 0 4.84-.87 6.45-2.36l-3.14-2.45c-.87.58-1.98.92-3.31.92-2.54 0-4.69-1.72-5.46-4.03H3.3v2.53A9.74 9.74 0 0 0 12 21.67Z" />
+      <path fill="#FBBC05" d="M6.54 13.75A5.85 5.85 0 0 1 6.23 12c0-.61.1-1.2.31-1.75V7.72H3.3A9.75 9.75 0 0 0 2.25 12c0 1.57.38 3.06 1.05 4.28l3.24-2.53Z" />
+      <path fill="#EA4335" d="M12 6.22c1.43 0 2.71.49 3.72 1.45l2.79-2.79C16.84 3.3 14.63 2.33 12 2.33a9.74 9.74 0 0 0-8.7 5.39l3.24 2.53c.77-2.31 2.92-4.03 5.46-4.03Z" />
+    </svg>
+  );
+}
 const qoohiAiImg = QoohiLogo;
 const teacherImg = QoohiLogo;
 
@@ -1185,7 +1195,7 @@ function SocialButtons({ mode = "login", role = "" }) {
     if (mode === "register" && role) params.set("role", role);
     window.location.assign(`${API_BASE}/api/auth/oauth/google/start?${params.toString()}`);
   };
-  return <div className="grid grid-cols-1 gap-3"><button type="button" onClick={startOAuth} className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 font-bold text-slate-700 transition hover:bg-slate-50"><FaGoogle className="text-red-500" /> Continue with Google</button></div>;
+  return <div className="grid grid-cols-1 gap-3"><button type="button" onClick={startOAuth} className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 font-bold text-slate-700 transition hover:bg-slate-50"><GoogleMark /> Continue with Google</button></div>;
 }
 
 function DashboardChooser({ dashboards, onSelect }) {
