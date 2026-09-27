@@ -23,6 +23,7 @@ public class AdminAuthController {
     String email = auth.normalize(value(body, "email"));
     String mode = "login".equals(value(body, "mode")) ? "login" : "register";
     if (email.isBlank()) throw new IllegalArgumentException("Email is required.");
+    if (count("SELECT count(*) FROM blocked_accounts WHERE lower(email)=lower(?)", email) > 0) throw new IllegalArgumentException("This email is permanently blocked.");
     if ("register".equals(mode) && value(body, "fullName").isBlank()) throw new IllegalArgumentException("Full name is required.");
     if ("login".equals(mode) && !SUPERADMIN_EMAIL.equals(email) && count("SELECT count(*) FROM admin_accounts WHERE lower(email)=lower(?)", email) == 0) {
       throw new IllegalArgumentException("Admin account not found.");
@@ -39,6 +40,7 @@ public class AdminAuthController {
     String email = auth.normalize(value(body, "email"));
     String mode = "login".equals(value(body, "mode")) ? "login" : "register";
     String code=value(body, "code");
+    if (count("SELECT count(*) FROM blocked_accounts WHERE lower(email)=lower(?)", email) > 0) throw new IllegalArgumentException("This email is permanently blocked.");
     if(!code.matches("[A-Za-z0-9!@#$%^&*()_+=\\[\\]{}:,.?\\-]{32}")) throw new IllegalArgumentException("Admin verification code must be exactly 32 characters and include letters, numbers, and special characters.");
     auth.verifyCode(email, code, "admin_" + mode);
     Map<String, Object> account = account(email);

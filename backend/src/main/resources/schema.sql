@@ -53,6 +53,14 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_school_students_institution ON school_students(institution_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE TABLE IF NOT EXISTS blocked_accounts (
+ id BIGSERIAL PRIMARY KEY,
+ email VARCHAR(320) UNIQUE,
+ whatsapp VARCHAR(40) UNIQUE,
+ reason TEXT NOT NULL DEFAULT 'Account deleted by superadmin',
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ CHECK (email IS NOT NULL OR whatsapp IS NOT NULL)
+);
 CREATE TABLE IF NOT EXISTS ai_settings (
  setting_key VARCHAR(80) PRIMARY KEY,
  setting_value TEXT NOT NULL DEFAULT '',

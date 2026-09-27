@@ -177,6 +177,7 @@ export default function AdminApp() {
   const [adminSection, setAdminSection] = useState("overview");
   const [adminAccounts, setAdminAccounts] = useState([]);
   const [isSuperAdminUser, setIsSuperAdminUser] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState(null);
   const [adminCreateForm, setAdminCreateForm] = useState({ name: "", email: "" });
   const [adminCreateResult, setAdminCreateResult] = useState(null);
   const [adminCreateError, setAdminCreateError] = useState("");
@@ -198,7 +199,6 @@ export default function AdminApp() {
 
   const adminNav = [
     { id: "overview", Icon: FaShieldAlt, label: "Overview" },
-    { id: "balances", Icon: FaWallet, label: "Balances" },
     { id: "services", Icon: FaSlidersH, label: "Services" },
     { id: "deposits", Icon: FaCheck, label: "Deposits" },
     { id: "withdrawals", Icon: FaMoneyBillWave, label: "Withdrawals" },
@@ -315,6 +315,24 @@ export default function AdminApp() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const deleteUserAccount = async (member) => {
+    if (!isSuperAdminUser) return;
+    if (!window.confirm(`Delete ${member.full_name || member.email || "this account"}? Its email and WhatsApp number will be permanently blocked.`)) return;
+    setDeletingUserId(member.id);
+    setError("");
+    setAdminStatus("");
+    try {
+      const data = await fetchJson(`/api/admin/users/${member.id}`, adminKey, "DELETE");
+      await loadOverview();
+      setGroupDetailView(false);
+      setAdminStatus(data.message || "Account deleted and permanently blocked.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingUserId(null);
     }
   };
 
@@ -1490,17 +1508,20 @@ export default function AdminApp() {
                               <p className="text-base font-black text-white">{member.full_name}</p>
                               <p className="mt-1 text-sm text-slate-300">{member.email}</p>
                               <p className="mt-1 text-sm text-slate-300">{member.whatsapp || "No WhatsApp number"}</p>
+                              <p className="mt-2 text-sm font-black text-cyan-300">Ksh {Number(member.balance || 0).toLocaleString()}</p>
                             </div>
-                            {whatsappLink && (
-                              <a
-                                href={whatsappLink}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center justify-center rounded-full bg-emerald-400 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-emerald-300"
-                              >
-                                Text on WhatsApp
-                              </a>
-                            )}
+                            <div className="flex flex-wrap gap-2">
+                              {whatsappLink && (
+                                <a href={whatsappLink} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center rounded-full bg-emerald-400 px-4 py-2 text-xs font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-emerald-300">
+                                  Text on WhatsApp
+                                </a>
+                              )}
+                              {isSuperAdminUser && (
+                                <button type="button" onClick={() => deleteUserAccount(member)} disabled={deletingUserId === member.id} className="inline-flex items-center justify-center gap-2 rounded-full border border-rose-300/30 bg-rose-300/10 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-rose-100 transition hover:bg-rose-300/20 disabled:cursor-not-allowed disabled:opacity-60">
+                                  <FaTrash /> {deletingUserId === member.id ? "Deleting..." : "Delete & block"}
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
