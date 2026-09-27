@@ -1395,7 +1395,8 @@ function DashboardPage({
     ...(isTeacher ? [{ id: "specializations", Icon: FaLayerGroup, label: "Specializations" }] : []),
     ...(isParent ? [{ id: "parent", Icon: FaUsers, label: "Support" }] : []),
     ...(isParent ? [{ id: "register-child", Icon: FaUserGraduate, label: "Register Your Child" }] : []),
-    ...(isParent ? [{ id: "materials", Icon: FaBookOpen, label: "Materials" }] : []),
+    ...(isParent ? [{ id: "materials", Icon: FaBookOpen, label: "IEP BOOK" }] : []),
+    ...(isParent ? [{ id: "teacher", Icon: FaChalkboardTeacher, label: "MY TEACHER" }] : []),
   ];
 
   const openProfile = (tab = "view") => {
@@ -1514,25 +1515,25 @@ function DashboardPage({
       )}
 
       {/* ── Dashboard Sidebar Layout ── */}
-      <div className="flex flex-row gap-6">
+      <div className="flex flex-row gap-3 sm:gap-6">
 
         {/* Left Sidebar */}
-        <aside className="flex flex-col w-52 flex-shrink-0">
-          <div className="sticky top-24 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/90 backdrop-blur-xl">
-            <div className="border-b border-white/10 p-4">
-              <button type="button" onClick={() => setActiveSection("profile")} className="group flex w-full items-center gap-3 text-left">
+        <aside className="sticky top-24 flex w-16 flex-shrink-0 flex-col sm:w-52">
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/90 backdrop-blur-xl">
+            <div className="border-b border-white/10 p-2 sm:p-4">
+              <button type="button" onClick={() => setActiveSection("profile")} className="group flex w-full items-center justify-center gap-3 text-left sm:justify-start">
                 <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border-2 border-white/20 bg-slate-800 transition group-hover:border-cyan-400/40">
                   {profileAvatar
                     ? <img src={profileAvatar} alt="" className="h-full w-full object-cover" />
                     : <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-cyan-800 to-blue-900 text-sm font-black text-cyan-200">{fullName?.[0]?.toUpperCase() || "Q"}</div>
                   }
                 </div>
-                <div className="min-w-0">
+                <div className="hidden min-w-0 sm:block">
                   <p className="truncate text-sm font-bold text-white">{firstName || fullName}</p>
                   <p className="truncate text-[10px] capitalize text-slate-500">{roleLabel}</p>
                 </div>
               </button>
-              <div className="mt-3 flex items-center justify-between rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2">
+              <div className="mt-3 hidden items-center justify-between rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2 sm:flex">
                 <span className="text-[10px] text-slate-500">Balance</span>
                 <span className="text-sm font-black text-cyan-300">Ksh {balance.toLocaleString()}</span>
               </div>
@@ -1540,14 +1541,14 @@ function DashboardPage({
             <nav className="space-y-0.5 p-2">
               {sidebarNav.map(({ id, Icon, label }) => (
                 <button key={id} type="button" onClick={() => setActiveSection(id)}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${
+                  className={`flex w-full items-center justify-center gap-3 rounded-xl px-2 py-3 text-left text-sm transition sm:justify-start sm:px-3 sm:py-2.5 ${
                     activeSection === id
                       ? "bg-cyan-500/20 font-bold text-cyan-300"
                       : "font-medium text-slate-400 hover:bg-white/5 hover:text-white"
                   }`}
                 >
                   <Icon className={`flex-shrink-0 text-[15px] ${activeSection === id ? "text-cyan-400" : "text-slate-600"}`} />
-                  {label}
+                  <span className="hidden sm:inline">{label}</span>
                 </button>
               ))}
             </nav>
@@ -1556,7 +1557,7 @@ function DashboardPage({
                 <p className="px-3 pb-1 text-[10px] font-black uppercase tracking-widest text-slate-600">Switch dashboard</p>
                 {availableDashboards.map((item) => (
                   <button key={item.role} type="button" onClick={() => onSwitchDashboard?.(item.role)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-xs font-bold text-cyan-300 transition hover:bg-cyan-500/10">
-                    {item.role === "teacher" ? "Coach dashboard" : "Parent dashboard"}
+                    <span className="hidden sm:inline">{item.role === "teacher" ? "Coach dashboard" : "Parent dashboard"}</span><span className="sm:hidden">{item.role === "teacher" ? "C" : "P"}</span>
                   </button>
                 ))}
               </div>
@@ -2285,8 +2286,10 @@ function DashboardPage({
 
           {/* MATERIALS section (parent) */}
           {activeSection === "materials" && (
-            <ParentMaterialsSection authHeaders={authHeaders} balance={balance} openProfile={openProfile} />
+            <ParentMaterialsSection authHeaders={authHeaders} balance={balance} openProfile={openProfile} openChat={openChat} />
           )}
+
+          {activeSection === "teacher" && <ParentMaterialsSection authHeaders={authHeaders} balance={balance} openProfile={openProfile} openChat={openChat} teacherOnly />}
 
           {/* SPECIALIZATIONS section (teacher) */}
           {activeSection === "specializations" && (
@@ -2676,7 +2679,7 @@ function getSubjectsForGrade(grade) {
   return KENYAN_SUBJECTS.lower;
 }
 
-function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
+function ParentMaterialsSection({ authHeaders, balance, openProfile, openChat, teacherOnly = false }) {
   const [grade, setGrade] = useState("1");
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState({});
@@ -2839,6 +2842,10 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
     }
   };
 
+  if (teacherOnly) {
+    return <GlassPanel className="p-6 sm:p-8"><SectionLabel>MY TEACHER</SectionLabel><h3 className="mt-2 text-2xl font-black text-white">Find a teacher</h3><p className="mt-2 text-sm text-slate-400">Choose a subject to find a QOOHI teacher who can support this learner.</p><div className="mt-6 grid gap-3 sm:grid-cols-2">{subjects.map((subject) => <div key={subject} className="rounded-2xl border border-white/10 bg-white/5 p-4"><p className="font-bold text-white">{subject}</p><button type="button" onClick={() => fetchTeacherSuggest(subject)} disabled={teacherResults[subject]?.loading} className="mt-3 w-full rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-black text-cyan-300">{teacherResults[subject]?.loading ? "Finding..." : "Find teacher"}</button>{teacherResults[subject]?.reason && <p className="mt-2 text-xs text-slate-400">{teacherResults[subject].reason}</p>}{teacherResults[subject]?.teacher && <button type="button" onClick={() => openChat?.(teacherResults[subject].teacher.id, teacherResults[subject].teacher.name)} className="mt-2 text-xs font-bold text-cyan-300">Open chat</button>}</div>)}</div></GlassPanel>;
+  }
+
   return (
     <GlassPanel className="p-6 sm:p-8">
       <SectionLabel>PHYSICAL IEP BOOK</SectionLabel>
@@ -2996,7 +3003,7 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
                         onClick={() => setOpenTeacherPanel(openTeacherPanel === subject ? null : subject)}
                         className="flex-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300 transition hover:bg-cyan-400/20"
                       >
-                        Teacher
+                        AI Guide
                       </button>
                     </div>
 

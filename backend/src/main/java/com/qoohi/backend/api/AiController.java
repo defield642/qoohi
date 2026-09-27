@@ -10,7 +10,7 @@ import java.net.URI; import java.net.http.*; import java.util.*;
 @RestController @RequestMapping("/api/ai")
 public class AiController {
   private final ObjectMapper json; private final JdbcTemplate db; private final String environmentKey; private final String model;
-  public AiController(ObjectMapper json,JdbcTemplate db,@Value("${OPENROUTER_API_KEY:}") String environmentKey,@Value("${OPENROUTER_MODEL:openai/gpt-4o-mini}") String model){this.json=json;this.db=db;this.environmentKey=environmentKey;this.model=model;}
+  public AiController(ObjectMapper json,JdbcTemplate db,@Value("${OPENROUTER_API_KEY:}") String environmentKey,@Value("${OPENROUTER_MODEL:openrouter/free}") String model){this.json=json;this.db=db;this.environmentKey=environmentKey;this.model=model;}
   @PostMapping({"/chat","/materials","/topic-guide"}) public Map<String,Object> generate(@RequestBody Map<String,Object> body,HttpServletRequest request){
     Object messages=body.get("messages");
     String prompt=String.valueOf(body.getOrDefault("prompt",body.getOrDefault("message",body.getOrDefault("topic","Help a Kenyan CBC learner."))));
