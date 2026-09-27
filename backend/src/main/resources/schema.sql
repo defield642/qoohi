@@ -53,6 +53,11 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_school_students_institution ON school_students(institution_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE TABLE IF NOT EXISTS ai_settings (
+ setting_key VARCHAR(80) PRIMARY KEY,
+ setting_value TEXT NOT NULL DEFAULT '',
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 ALTER TABLE auth_codes ADD COLUMN IF NOT EXISTS metadata_json TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS secondary_roles TEXT NOT NULL DEFAULT '';

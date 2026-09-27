@@ -29,19 +29,24 @@ public class AuthService {
     email=normalize(email); String code=String.format("%06d", random.nextInt(1_000_000));
     db.update("INSERT INTO auth_codes(email,code_hash,purpose,expires_at) VALUES (?,?,?,?)", email, hash(code), purpose, OffsetDateTime.now().plusMinutes(expiry));
     String subject="QOOHI verification code"; String text="Your QOOHI code is "+code+". It expires in "+expiry+" minutes.";
-    try { sendEmail(email,subject,text); log.info("Verification email sent for purpose={} recipient={}",purpose,email); }
+    try { log.info("Verification email send starting purpose={} recipient={} transport={}", purpose, email, resendApiKey!=null&&!resendApiKey.isBlank()?"resend":"smtp"); sendEmail(email,subject,text); log.info("Verification email sent for purpose={} recipient={}",purpose,email); }
     catch (Exception e) { log.error("Verification email failed for purpose={} recipient={}. Check RESEND_API_KEY/EMAIL_FROM or SMTP configuration.",purpose,email,e); throw new IllegalStateException("Verification email could not be sent. Please try again later.",e); }
   }
   private void sendEmail(String recipient,String subject,String text) throws Exception {
     if (resendApiKey!=null&&!resendApiKey.isBlank()) {
       if (from.isBlank()) throw new IllegalStateException("EMAIL_FROM is required when using Resend.");
       String body=json.writeValueAsString(Map.of("from",from,"to",List.of(recipient),"subject",subject,"text",text));
+      log.info("Email send starting provider=resend recipient={} from={}", recipient, from);
       HttpResponse<String> response=HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("https://api.resend.com/emails")).header("Authorization","Bearer "+resendApiKey).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(body)).build(),HttpResponse.BodyHandlers.ofString());
+      log.info("Email send resolved provider=resend recipient={} status={} response={}", recipient, response.statusCode(), response.body());
       if(response.statusCode()<200||response.statusCode()>=300) throw new IllegalStateException("Resend HTTP "+response.statusCode()+": "+response.body());
       return;
     }
     if(from.isBlank()) throw new IllegalStateException("No email sender configured. Set RESEND_API_KEY and EMAIL_FROM, or SMTP_HOST/SMTP_USER/SMTP_PASS.");
-    SimpleMailMessage m=new SimpleMailMessage(); m.setFrom(from); m.setTo(recipient); m.setSubject(subject); m.setText(text); mail.send(m);
+    SimpleMailMessage m=new SimpleMailMessage(); m.setFrom(from); m.setTo(recipient); m.setSubject(subject); m.setText(text);
+    log.info("Email send starting provider=smtp recipient={} from={}", recipient, from);
+    mail.send(m);
+    log.info("Email send resolved provider=smtp recipient={}", recipient);
   }
   public Map<String,Object> verify(String email, String code, String purpose) {
     verifyCode(email,code,purpose); return db.queryForMap("SELECT * FROM users WHERE email=?",normalize(email));

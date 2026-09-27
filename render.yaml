@@ -33,6 +33,10 @@ services:
         value: https://qoohi-web.onrender.com
       - key: USER_APP_URL
         value: https://qoohi-web.onrender.com
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: openai/gpt-4o-mini
 
   - type: web
     name: qoohi-web

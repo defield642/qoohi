@@ -189,6 +189,8 @@ export default function AdminApp() {
   const [verifyingAdminCode, setVerifyingAdminCode] = useState(false);
   const [checkingVerification, setCheckingVerification] = useState(false);
   const [adminPendingEmail, setAdminPendingEmail] = useState("");
+  const [openRouterApiKey, setOpenRouterApiKey] = useState("");
+  const [savingAiKey, setSavingAiKey] = useState(false);
 
   const adminNav = [
     { id: "overview", Icon: FaShieldAlt, label: "Overview" },
@@ -198,6 +200,7 @@ export default function AdminApp() {
     { id: "withdrawals", Icon: FaMoneyBillWave, label: "Withdrawals" },
     { id: "groups", Icon: FaUsers, label: "Groups" },
     { id: "admins", Icon: FaUserShield, label: "Admins" },
+    { id: "ai", Icon: FaRobot, label: "AI" },
   ];
   const backgroundImages = [bg1, bg2, bg3, bg4, bg5, bg6];
   const [bgIndex, setBgIndex] = useState(0);
@@ -673,6 +676,21 @@ export default function AdminApp() {
       setError(err.message);
     } finally {
       setSavingChargeKey("");
+    }
+  };
+
+  const saveOpenRouterKey = async (event) => {
+    event.preventDefault();
+    setSavingAiKey(true);
+    setError("");
+    try {
+      await fetchJson("/api/admin/ai-settings", adminKey, "POST", JSON.stringify({ openrouterApiKey: openRouterApiKey.trim() }));
+      setOpenRouterApiKey("");
+      setAdminStatus("OpenRouter is configured. AI generation is ready immediately.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingAiKey(false);
     }
   };
 
@@ -1274,6 +1292,20 @@ export default function AdminApp() {
                 })}
               </div>
             </section>
+                )}
+
+                {adminSection === "ai" && (
+                  <section className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
+                    <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">AI provider</p>
+                    <h2 className="mt-2 text-2xl font-black text-white">OpenRouter settings</h2>
+                    <p className="mt-3 max-w-2xl text-sm text-slate-300">Add the OpenRouter key once. It is stored in PostgreSQL and used immediately for QOOHI books, lessons, and quizzes. Never place the key in frontend code.</p>
+                    <form onSubmit={saveOpenRouterKey} className="mt-6 max-w-xl space-y-4">
+                      <Field label="OpenRouter API key">
+                        <input type="password" value={openRouterApiKey} onChange={(event) => setOpenRouterApiKey(event.target.value)} placeholder="sk-or-v1-..." required className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 font-mono text-white outline-none focus:border-cyan-300/60" />
+                      </Field>
+                      <button type="submit" disabled={savingAiKey} className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:opacity-60"><FaSave /> {savingAiKey ? "Saving..." : "Save OpenRouter key"}</button>
+                    </form>
+                  </section>
                 )}
 
                 {/* DEPOSITS + WITHDRAWALS section */}

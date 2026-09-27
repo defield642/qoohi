@@ -9,11 +9,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
 
 @RestController @RequestMapping("/api")
 public class InstitutionController {
+  private static final Logger log = LoggerFactory.getLogger(InstitutionController.class);
   private final JdbcTemplate db; private final AuthService auth; private final MapsService maps; private final ObjectMapper json; private final JavaMailSender mail; private final NotificationService notifications; private final String userAppUrl;
   public InstitutionController(JdbcTemplate db,AuthService auth,MapsService maps,ObjectMapper json,JavaMailSender mail,NotificationService notifications,@org.springframework.beans.factory.annotation.Value("${qoohi.user-app-url:http://localhost:5000}") String userAppUrl){this.db=db;this.auth=auth;this.maps=maps;this.json=json;this.mail=mail;this.notifications=notifications;this.userAppUrl=userAppUrl;}
 
@@ -39,7 +42,7 @@ public class InstitutionController {
   @PostMapping("/places/details") public Map<String,Object> details(@RequestBody Map<String,Object>b){return Map.of("place",maps.details(str(b,"placeId")));}
   private UUID institution(String h){Map<String,Object>u=auth.user(h); if(u==null||u.get("institution_id")==null)throw new IllegalArgumentException("Institution verification required."); return UUID.fromString(u.get("institution_id").toString());}
   private void validateGrade(UUID institutionId,String grade){String normalized=grade==null?"":grade.trim().toLowerCase(Locale.ROOT);if(!normalized.matches("grade\\s+(\\d{1,2})"))throw new IllegalArgumentException("Choose a valid CBC grade.");int number=Integer.parseInt(normalized.replaceAll("[^0-9]",""));String type=db.queryForObject("SELECT school_type FROM institutions WHERE id=?",String.class,institutionId);boolean senior="senior".equalsIgnoreCase(type);if((senior&&(number<10||number>12))||(!senior&&(number<1||number>9)))throw new IllegalArgumentException(senior?"Senior School institutions can add Grades 10 to 12 only.":"Primary / Junior institutions can add Grades 1 to 9 only.");}
-  private void notifyUser(long id,String type,String title,String body,String email){db.update("INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)",id,type,title,body); try{if(email!=null&&!email.isBlank()){SimpleMailMessage m=new SimpleMailMessage();m.setTo(email);m.setSubject(title);m.setText(body);mail.send(m);}}catch(Exception ignored){} String phone=firstText("SELECT whatsapp FROM users WHERE id=?",id); notifications.whatsapp(phone,body);}
+  private void notifyUser(long id,String type,String title,String body,String email){db.update("INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)",id,type,title,body); try{if(email!=null&&!email.isBlank()){SimpleMailMessage m=new SimpleMailMessage();m.setTo(email);m.setSubject(title);m.setText(body);log.info("Notification email send starting recipient={} subject={}",email,title);mail.send(m);log.info("Notification email send resolved recipient={} subject={}",email,title);}}catch(Exception e){log.error("Notification email send failed recipient={} subject={}",email,title,e);} String phone=firstText("SELECT whatsapp FROM users WHERE id=?",id); notifications.whatsapp(phone,body);}
   private String firstText(String sql,Object...v){List<String> r=db.query(sql,(rs,n)->rs.getString(1),v);return r.isEmpty()?"":r.get(0);}
   private Long firstLong(String sql,Object...v){List<Long> r=db.query(sql,(rs,n)->rs.getLong(1),v);return r.isEmpty()?null:r.get(0);}
   private String str(Map<String,Object>b,String k){return b.get(k)==null?"":String.valueOf(b.get(k)).trim();} private String defaultValue(Map<String,Object>b,String k,String d){String v=str(b,k);return v.isBlank()?d:v;} private Double num(Map<String,Object>b,String k){Object v=b.get(k);try{return v==null||String.valueOf(v).isBlank()?null:Double.valueOf(String.valueOf(v));}catch(Exception e){return null;}}

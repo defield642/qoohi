@@ -53,6 +53,37 @@ function GoogleMark({ className = "h-5 w-5" }) {
     </svg>
   );
 }
+
+function ImageCropModal({ file, onCancel, onConfirm }) {
+  const [src, setSrc] = useState("");
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const imageRef = useRef(null);
+  const dragRef = useRef(null);
+  const cropSize = 260;
+  useEffect(() => {
+    if (!file) return undefined;
+    const reader = new FileReader();
+    reader.onload = () => setSrc(String(reader.result || ""));
+    reader.readAsDataURL(file);
+    return () => setSrc("");
+  }, [file]);
+  if (!file || !src) return null;
+  const move = (event) => { if (dragRef.current) setOffset({ x: event.clientX - dragRef.current.x, y: event.clientY - dragRef.current.y }); };
+  const stop = () => { dragRef.current = null; };
+  const confirm = () => {
+    const image = imageRef.current;
+    if (!image) return;
+    const outputSize = 400;
+    const canvas = document.createElement("canvas"); canvas.width = outputSize; canvas.height = outputSize;
+    const context = canvas.getContext("2d");
+    const scale = (outputSize / cropSize) * zoom;
+    const width = image.naturalWidth * scale; const height = image.naturalHeight * scale;
+    context.drawImage(image, (outputSize - width) / 2 + offset.x * (outputSize / cropSize), (outputSize - height) / 2 + offset.y * (outputSize / cropSize), width, height);
+    canvas.toBlob((blob) => { if (!blob) return; const reader = new FileReader(); reader.onload = () => onConfirm(String(reader.result || "")); reader.readAsDataURL(blob); }, "image/jpeg", 0.9);
+  };
+  return <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm"><div className="w-full max-w-sm rounded-3xl border border-white/15 bg-slate-950 p-6 shadow-2xl"><h3 className="text-center text-lg font-black text-white">Adjust profile photo</h3><div onPointerDown={(event) => { dragRef.current = { x: event.clientX - offset.x, y: event.clientY - offset.y }; }} onPointerMove={move} onPointerUp={stop} onPointerLeave={stop} className="relative mx-auto mt-5 cursor-grab overflow-hidden rounded-full border-2 border-cyan-400/40 bg-slate-900 active:cursor-grabbing" style={{ width: cropSize, height: cropSize, touchAction: "none" }}><img ref={imageRef} src={src} alt="Crop preview" draggable="false" className="pointer-events-none absolute left-1/2 top-1/2 max-w-none select-none" style={{ transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }} /></div><label className="mt-5 flex items-center gap-3 text-xs font-bold text-slate-300">Zoom<input type="range" min="1" max="3" step="0.05" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} className="flex-1 accent-cyan-400" /></label><div className="mt-6 flex gap-3"><SecondaryButton type="button" className="flex-1" onClick={onCancel}>Cancel</SecondaryButton><ActionButton type="button" className="flex-1" onClick={confirm}>Save Photo</ActionButton></div></div></div>;
+}
 const qoohiAiImg = QoohiLogo;
 const teacherImg = QoohiLogo;
 
@@ -1251,6 +1282,7 @@ function DashboardPage({
     whatsapp: "",
     avatarUrl: "",
   });
+  const [cropFile, setCropFile] = useState(null);
   const [depositForm, setDepositForm] = useState({ phone: "", amount: "" });
   const [depositResult, setDepositResult] = useState(null);
   const [withdrawForm, setWithdrawForm] = useState({
@@ -1374,14 +1406,7 @@ function DashboardPage({
 
   const handleAvatarFile = (file) => {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setProfileDraft((current) => ({
-        ...current,
-        avatarUrl: String(reader.result || ""),
-      }));
-    };
-    reader.readAsDataURL(file);
+    setCropFile(file);
   };
 
   const saveProfile = async (event) => {
@@ -1468,6 +1493,7 @@ function DashboardPage({
       subtitle="Profile, balance, services, and activity"
       compact
     >
+      {cropFile && <ImageCropModal file={cropFile} onCancel={() => setCropFile(null)} onConfirm={(avatarUrl) => { setProfileDraft((current) => ({ ...current, avatarUrl })); setCropFile(null); }} />}
       {unreadNotifs?.length > 0 && (
         <div className="mb-4 space-y-2">
           {unreadNotifs.map((n, i) => (
@@ -1552,6 +1578,13 @@ function DashboardPage({
 
           {/* PROFILE section */}
           {activeSection === "profile" && (
+            <GlassPanel className="mx-auto max-w-xl p-6 sm:p-8">
+              <div className="flex flex-col items-center text-center"><div className="relative h-24 w-24"><div className="h-24 w-24 overflow-hidden rounded-full border-2 border-white/15 bg-slate-800">{profileAvatar ? <img src={profileAvatar} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-3xl font-black text-cyan-300">{fullName?.[0]?.toUpperCase() || "Q"}</div>}</div><label className="absolute -bottom-1 -right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-cyan-400 text-slate-950 shadow-lg"><FaEdit className="text-xs" /><input type="file" accept="image/*" className="hidden" onChange={(event) => handleAvatarFile(event.target.files?.[0])} /></label></div><h3 className="mt-4 text-xl font-black text-white">Edit Profile</h3></div>
+              <form className="mt-8 space-y-5" onSubmit={saveProfile}><Input label="Full name" value={profileDraft.fullName} onChange={(value) => setProfileDraft((current) => ({ ...current, fullName: value }))} /><Input label="WhatsApp number" value={profileDraft.whatsapp} onChange={(value) => setProfileDraft((current) => ({ ...current, whatsapp: value }))} /><div className="rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-500">{dashboard.student.email}</div>{profileStatus && <p className="text-sm text-emerald-400">{profileStatus}</p>}<ActionButton type="submit" disabled={savingProfile} className="w-full">{savingProfile ? "Saving..." : "Save Changes"}</ActionButton></form>
+            </GlassPanel>
+          )}
+
+          {false && activeSection === "profile" && (
             <div className="space-y-6">
               <div className="overflow-hidden rounded-[2rem] border border-white/15 bg-slate-900/80 shadow-2xl shadow-black/40 backdrop-blur-xl">
                 {/* Cover banner */}
@@ -2620,6 +2653,21 @@ const SUBJECT_GRADIENTS = {
   "Hygiene & Nutrition": "from-teal-500/20 to-cyan-400/10",
 };
 
+function buildIepPdf(title, content) {
+  const escapePdf = (value) => String(value).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  const lines = [`QOOHI PHYSICAL IEP BOOK`, title, "", ...String(content || "").split(/\r?\n/)].flatMap((line) => {
+    const words = String(line).split(/\s+/); const wrapped = []; let current = "";
+    words.forEach((word) => { if ((current + " " + word).trim().length > 88) { wrapped.push(current); current = word; } else current = `${current} ${word}`.trim(); });
+    wrapped.push(current); return wrapped;
+  }).filter(Boolean).slice(0, 52);
+  const text = ["BT", "/F1 18 Tf", "72 750 Td", `(${escapePdf(lines.shift() || "QOOHI")}) Tj`, "/F1 13 Tf", ...lines.flatMap((line) => [`0 -22 Td`, `(${escapePdf(line)}) Tj`]), "ET"].join("\n");
+  const objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>", `<< /Length ${text.length} >>\nstream\n${text}\nendstream`, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
+  let pdf = "%PDF-1.4\n"; const offsets = [0];
+  objects.forEach((object, index) => { offsets[index + 1] = pdf.length; pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
+  const xref = pdf.length; pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([pdf], { type: "application/pdf" });
+}
+
 function getSubjectsForGrade(grade) {
   const g = Number(grade);
   if (g >= 1 && g <= 3) return KENYAN_SUBJECTS.lower;
@@ -2781,25 +2829,9 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
         headers: { ...authHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ grade, topic: subject, content }),
       });
-      const filename = `grade${grade}-${subject.replace(/\s+/g, "-").toLowerCase()}`;
-      if (format === "doc") {
-        const html = `<html><body><h1>Grade ${grade} - ${subject}</h1><pre style="font-family:sans-serif;font-size:14px;line-height:1.6">${content}</pre></body></html>`;
-        const blob = new Blob([html], { type: "application/msword" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${filename}.doc`;
-        a.click();
-        URL.revokeObjectURL(url);
-      } else {
-        const blob = new Blob([content], { type: "application/pdf" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${filename}.txt`;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
+      const filename = `qoohi-physical-iep-book-grade-${grade}-${subject.replace(/\s+/g, "-").toLowerCase()}`;
+      const blob = buildIepPdf(`Grade ${grade} — ${subject}`, content);
+      const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `${filename}.pdf`; a.click(); URL.revokeObjectURL(url);
     } catch (err) {
       setMatError(err.message);
     } finally {
@@ -2809,9 +2841,9 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
 
   return (
     <GlassPanel className="p-6 sm:p-8">
-      <SectionLabel>CBC Materials</SectionLabel>
-      <h3 className="mt-2 mb-2 text-2xl font-black text-white">Kenyan Curriculum Materials</h3>
-      <p className="mb-6 text-sm text-slate-400">Select a grade to view subjects. Click any subject card to see learning content.</p>
+      <SectionLabel>PHYSICAL IEP BOOK</SectionLabel>
+      <h3 className="mt-2 mb-2 text-2xl font-black text-white">Kenyan CBC IEP Books</h3>
+      <p className="mb-6 text-sm text-slate-400">Choose a grade. QOOHI creates a printable book with sequenced lessons and quizzes.</p>
 
       <div className="mb-6 flex flex-wrap items-end gap-3">
         <div className="w-full sm:w-48">
@@ -2833,29 +2865,11 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
         >
           Generate Images
         </button>
-        <div className="flex-1 min-w-[220px]">
-          <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Search image</label>
-          <div className="flex gap-2">
-            <input
-              value={imageSearchTopic}
-              onChange={(e) => setImageSearchTopic(e.target.value)}
-              placeholder="Search any topic image"
-              className="flex-1 rounded-xl border border-white/10 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-400/60 placeholder-slate-600"
-            />
-            <button
-              type="button"
-              onClick={generateSearchImage}
-              className="rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.22em] text-slate-300 transition hover:bg-white/10"
-            >
-              Search
-            </button>
-          </div>
-        </div>
       </div>
 
       {matError && <p className="mb-4 text-sm text-rose-400">{matError}</p>}
 
-      {searchedImage && (
+      {false && searchedImage && (
         <div className="mb-6 overflow-hidden rounded-2xl border border-white/10 bg-slate-950/60">
           <div className="border-b border-white/10 px-4 py-3 text-xs font-black uppercase tracking-[0.22em] text-slate-400">
             Search Result — {searchedImage.topic}
@@ -2976,14 +2990,6 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile }) {
                         className="flex-1 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-300 transition hover:bg-white/10 disabled:opacity-50"
                       >
                         {downloading === subject ? "..." : "PDF"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => downloadAs("doc", subject, content)}
-                        disabled={downloading === subject}
-                        className="flex-1 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-slate-300 transition hover:bg-white/10 disabled:opacity-50"
-                      >
-                        {downloading === subject ? "..." : "Word"}
                       </button>
                       <button
                         type="button"
@@ -3373,6 +3379,8 @@ function StreamingText({ text, speed = 20 }) {
 
 function QoohiAIPage({ sessionToken }) {
 
+  const authHeaders = sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
+
   const aiSessionId = useMemo(() => {
     const saved = localStorage.getItem("qoohi_ai_session_id");
     if (saved) return saved;
@@ -3385,6 +3393,7 @@ function QoohiAIPage({ sessionToken }) {
   const [loading, setLoading] = useState(false);
   const [editingIndex, setEditingIndex] = useState(null);
   const [editText, setEditText] = useState("");
+  const [lessonSetup, setLessonSetup] = useState({ subject: "", grade: "1", topic: "" });
   
   const [streamingContent, setStreamingContent] = useState("");
   const streamingContentRef = useRef("");
@@ -3564,12 +3573,29 @@ function QoohiAIPage({ sessionToken }) {
     await sendMessage(trimmed);
   };
 
+  const startLesson = () => {
+    const { subject, grade, topic } = lessonSetup;
+    if (!subject.trim() || !topic.trim()) return;
+    const prompt = `Teach me ${subject.trim()} for Kenyan CBC Grade ${grade}, topic ${topic.trim()}. Teach in a clear sequence. After each major section, stop and give me a short quiz; wait for my answers before continuing. Correct my answers and keep a progress/IEP note as we continue.`;
+    localStorage.setItem("qoohi_iep_progress", JSON.stringify({ subject: subject.trim(), grade, topic: topic.trim(), updatedAt: new Date().toISOString() }));
+    sendMessage([{ role: "user", content: prompt }]);
+  };
+
   return (
     <PageStack
       title="QOOHI AI"
       subtitle="Ask anything. Learn. Build. Create."
     >
       <GlassPanel className="flex h-[70vh] flex-col p-4">
+        <div className="mb-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4">
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300">Start a lesson</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_110px_1fr_auto]">
+            <input value={lessonSetup.subject} onChange={(event) => setLessonSetup((current) => ({ ...current, subject: event.target.value }))} placeholder="Subject e.g. Mathematics" className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400" />
+            <select value={lessonSetup.grade} onChange={(event) => setLessonSetup((current) => ({ ...current, grade: event.target.value }))} className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400">{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={String(index + 1)}>Grade {index + 1}</option>)}</select>
+            <input value={lessonSetup.topic} onChange={(event) => setLessonSetup((current) => ({ ...current, topic: event.target.value }))} placeholder="Topic e.g. Fractions" className="rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-white outline-none focus:border-cyan-400" />
+            <button type="button" onClick={startLesson} disabled={loading || !lessonSetup.subject.trim() || !lessonSetup.topic.trim()} className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-50">Teach me</button>
+          </div>
+        </div>
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
           
 
