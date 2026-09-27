@@ -534,7 +534,7 @@ export default function AdminApp() {
   const visibleGroups = (overview?.groups || []).filter((group) => group.key !== "tournament");
   const activeGroup = visibleGroups.find((group) => group.key === selectedGroup?.key) || null;
   const isDashboardReady = adminVerified && overview;
-  const activeAdminCount = adminAccounts.filter((item) => Number(item.active || 0) === 1).length;
+  const activeAdminCount = adminAccounts.length;
   const remainingAdminSlots = Math.max(ADMIN_ACCOUNT_LIMIT - activeAdminCount, 0);
 
   const sendMessage = async (targetType, targetId) => {
@@ -775,11 +775,8 @@ export default function AdminApp() {
           <section className="qoohi-admin-auth mx-auto mb-8 max-w-3xl rounded-[2.25rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl sm:p-8">
             <div className="qoohi-admin-auth-heading mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Admin access</p>
-                <h1 className="mt-2 text-4xl font-black text-white">QOOHI Admin Access</h1>
-                <p className="mt-3 max-w-2xl text-sm text-slate-300">
-                  Register or log in with your full name and email. We will send a 32-character code to your inbox, then unlock the dashboard after verification.
-                </p>
+                <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Administrator sign in</p>
+                <h1 className="mt-2 text-4xl font-black text-white">Admin portal</h1>
               </div>
               <div className="qoohi-admin-auth-badges flex flex-wrap gap-2">
                 <Badge>{activeAdminCount}/{ADMIN_ACCOUNT_LIMIT} admins</Badge>
@@ -902,8 +899,9 @@ export default function AdminApp() {
                 <Field label="Verification code">
                   <input
                     value={adminAuthForm.code}
-                    onChange={(event) => setAdminAuthForm((current) => ({ ...current, code: event.target.value }))}
+                    onChange={(event) => setAdminAuthForm((current) => ({ ...current, code: event.target.value.slice(0, 32) }))}
                     placeholder="Paste the 32-character code"
+                    maxLength={32}
                     className="qoohi-admin-input w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 font-mono tracking-[0.2em] text-white outline-none focus:border-cyan-300/60"
                   />
                 </Field>
@@ -920,7 +918,7 @@ export default function AdminApp() {
                 <div className="flex flex-wrap gap-3">
                   <button
                     type="submit"
-                    disabled={verifyingAdminCode}
+                    disabled={verifyingAdminCode || adminAuthForm.code.length !== 32}
                     className="qoohi-admin-primary inline-flex items-center gap-2 rounded-full bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <FaCheck /> {verifyingAdminCode ? "Verifying..." : "Verify code"}
@@ -1529,7 +1527,7 @@ export default function AdminApp() {
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Badge>{activeAdminCount} active</Badge>
+                  <Badge>{activeAdminCount} total</Badge>
                   <Badge>{remainingAdminSlots} slots left</Badge>
                 </div>
               </div>

@@ -32,6 +32,13 @@ public class AuthService {
     try { log.info("Verification email send starting purpose={} recipient={} transport={}", purpose, email, resendApiKey!=null&&!resendApiKey.isBlank()?"resend":"smtp"); sendEmail(email,subject,text); log.info("Verification email sent for purpose={} recipient={}",purpose,email); }
     catch (Exception e) { log.error("Verification email failed for purpose={} recipient={}. Check RESEND_API_KEY/EMAIL_FROM or SMTP configuration.",purpose,email,e); throw new IllegalStateException("Verification email could not be sent. Please try again later.",e); }
   }
+  public void sendAdminCode(String email, String purpose) {
+    email=normalize(email); String code=randomAdminCode();
+    db.update("INSERT INTO auth_codes(email,code_hash,purpose,expires_at) VALUES (?,?,?,?)", email, hash(code), purpose, OffsetDateTime.now().plusMinutes(expiry));
+    String subject="QOOHI administrator verification code"; String text="Your QOOHI administrator verification code is "+code+". It expires in "+expiry+" minutes.";
+    try { log.info("Admin verification email send starting purpose={} recipient={}",purpose,email); sendEmail(email,subject,text); log.info("Admin verification email sent for purpose={} recipient={}",purpose,email); }
+    catch (Exception e) { log.error("Admin verification email failed for purpose={} recipient={}",purpose,email,e); throw new IllegalStateException("Verification email could not be sent. Please try again later.",e); }
+  }
   private void sendEmail(String recipient,String subject,String text) throws Exception {
     if (resendApiKey!=null&&!resendApiKey.isBlank()) {
       if (from.isBlank()) throw new IllegalStateException("EMAIL_FROM is required when using Resend.");
@@ -55,4 +62,5 @@ public class AuthService {
   public UUID session(long userId, UUID institutionId) { UUID token=UUID.randomUUID(); db.update("INSERT INTO sessions(token,user_id,institution_id,expires_at) VALUES (?,?,?,?)",token,userId,institutionId,OffsetDateTime.now().plusDays(30)); return token; }
   public Map<String,Object> user(String auth) { try { UUID token=UUID.fromString(auth==null?"":auth.replaceFirst("Bearer ","")); return db.queryForMap("SELECT u.*,s.institution_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>now()",token); } catch(Exception e) { return null; } }
   private String hash(String value) { try { byte[] b=MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)); return HexFormat.of().formatHex(b); } catch(Exception e) { throw new IllegalStateException(e); } }
+  private String randomAdminCode() { String upper="ABCDEFGHIJKLMNOPQRSTUVWXYZ", lower="abcdefghijklmnopqrstuvwxyz", digits="0123456789", special="!@#$%^&*()-_=+[]{}:,.?", all=upper+lower+digits+special; List<Character> chars=new ArrayList<>(); chars.add(upper.charAt(random.nextInt(upper.length()))); chars.add(lower.charAt(random.nextInt(lower.length()))); chars.add(digits.charAt(random.nextInt(digits.length()))); chars.add(special.charAt(random.nextInt(special.length()))); for(int i=4;i<32;i++) chars.add(all.charAt(random.nextInt(all.length()))); Collections.shuffle(chars,random); StringBuilder code=new StringBuilder(32); chars.forEach(code::append); return code.toString(); }
 }

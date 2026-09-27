@@ -27,10 +27,10 @@ public class AdminAuthController {
     if ("login".equals(mode) && !SUPERADMIN_EMAIL.equals(email) && count("SELECT count(*) FROM admin_accounts WHERE lower(email)=lower(?)", email) == 0) {
       throw new IllegalArgumentException("Admin account not found.");
     }
-    if ("register".equals(mode) && !SUPERADMIN_EMAIL.equals(email) && count("SELECT count(*) FROM admin_accounts WHERE active=true") >= ACCOUNT_LIMIT) {
+    if ("register".equals(mode) && !SUPERADMIN_EMAIL.equals(email) && count("SELECT count(*) FROM admin_accounts") >= ACCOUNT_LIMIT) {
       throw new IllegalArgumentException("The administrator limit of 5 active accounts has been reached.");
     }
-    auth.sendCode(email, "admin_" + mode);
+    auth.sendAdminCode(email, "admin_" + mode);
     return Map.of("ok", true, "message", "Verification code sent.");
   }
 
@@ -38,7 +38,9 @@ public class AdminAuthController {
   public Map<String, Object> verifyCode(@RequestBody Map<String, Object> body) {
     String email = auth.normalize(value(body, "email"));
     String mode = "login".equals(value(body, "mode")) ? "login" : "register";
-    auth.verifyCode(email, value(body, "code"), "admin_" + mode);
+    String code=value(body, "code");
+    if(!code.matches("[A-Za-z0-9!@#$%^&*()_+=\\[\\]{}:,.?\\-]{32}")) throw new IllegalArgumentException("Admin verification code must be exactly 32 characters and include letters, numbers, and special characters.");
+    auth.verifyCode(email, code, "admin_" + mode);
     Map<String, Object> account = account(email);
     if (account == null) {
       if (!"register".equals(mode) && !SUPERADMIN_EMAIL.equals(email)) throw new IllegalArgumentException("Admin account not found.");
