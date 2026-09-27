@@ -319,7 +319,7 @@ export default function AdminApp() {
   };
 
   const deleteUserAccount = async (member) => {
-    if (!isSuperAdminUser) return;
+    if (!adminKey) return;
     if (!window.confirm(`Delete ${member.full_name || member.email || "this account"}? Its email and WhatsApp number will be permanently blocked.`)) return;
     setDeletingUserId(member.id);
     setError("");
@@ -1518,7 +1518,7 @@ export default function AdminApp() {
                                   Text on WhatsApp
                                 </a>
                               )}
-                              {isSuperAdminUser && (
+                              {adminKey && (
                                 <button type="button" onClick={() => deleteUserAccount(member)} disabled={deletingUserId === member.id} className="inline-flex items-center justify-center gap-2 rounded-full border border-rose-300/30 bg-rose-300/10 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-rose-100 transition hover:bg-rose-300/20 disabled:cursor-not-allowed disabled:opacity-60">
                                   <FaTrash /> {deletingUserId === member.id ? "Deleting..." : "Delete & block"}
                                 </button>

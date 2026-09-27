@@ -49,7 +49,7 @@ public class AdminAuthController {
       String name = value(body, "fullName");
       boolean superadmin = SUPERADMIN_EMAIL.equals(email);
       String key = accessKey();
-      db.update("INSERT INTO admin_accounts(name,email,access_key,is_superadmin,active) VALUES(?,?,?,?,?)", name.isBlank() ? "QOOHI Superadmin" : name, email, key, superadmin, true);
+      db.update("INSERT INTO admin_accounts(name,email,access_key,is_superadmin,active) VALUES(?,?,?,?,?)", name.isBlank() ? "QOOHI Superadmin" : name, email, key, superadmin, superadmin);
       account = account(email);
     }
     if (!Boolean.TRUE.equals(account.get("active"))) {
