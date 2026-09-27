@@ -1026,7 +1026,7 @@ export default function AdminApp() {
 
                 {/* BALANCES section */}
                 {adminSection === "balances" && (
-                <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+                <section className="grid gap-6">
                   <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                       <div>
@@ -1044,7 +1044,6 @@ export default function AdminApp() {
                         <th className="pb-4">User</th>
                         <th className="pb-4">Role</th>
                         <th className="pb-4">Balance</th>
-                        <th className="pb-4 text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1069,14 +1068,6 @@ export default function AdminApp() {
                           </td>
                           <td className="py-4 text-slate-300">{user.role}</td>
                           <td className="py-4 font-bold text-cyan-300">Ksh {Number(user.balance || 0).toLocaleString()}</td>
-                          <td className="py-4 text-right">
-                            <button
-                              onClick={() => setBalanceForm((current) => ({ ...current, userId: String(user.id) }))}
-                              className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-cyan-200 transition hover:bg-cyan-300 hover:text-slate-950"
-                            >
-                              Edit balance
-                            </button>
-                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1084,7 +1075,7 @@ export default function AdminApp() {
                 </div>
               </div>
 
-              <div className="space-y-4">
+              {false && <div className="space-y-4">
                 <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -1168,7 +1159,7 @@ export default function AdminApp() {
                     </button>
                   </form>
                 </div>
-              </div>
+              </div>}
             </section>
                 )}
 

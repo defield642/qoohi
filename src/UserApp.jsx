@@ -2692,6 +2692,7 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile, openChat, t
   const [openTeacherPanel, setOpenTeacherPanel] = useState(null);
   const [teacherResults, setTeacherResults] = useState({});
   const [topicGuides, setTopicGuides] = useState({});
+  const [topicDrafts, setTopicDrafts] = useState({});
   const [downloadingImg, setDownloadingImg] = useState(null);
   const subjects = getSubjectsForGrade(grade);
 
@@ -2797,12 +2798,14 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile, openChat, t
   };
 
   const fetchTopicGuide = async (subject) => {
+    const topic = String(topicDrafts[subject] || "").trim();
+    if (!topic) { setTopicGuides((prev) => ({ ...prev, [subject]: { loading: false, guide: "", error: "Enter a topic first." } })); return; }
     setTopicGuides((prev) => ({ ...prev, [subject]: { loading: true, guide: "", error: "" } }));
     try {
       const res = await fetchJson("/api/ai/topic-guide", {
         method: "POST",
         headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, grade }),
+        body: JSON.stringify({ subject, grade, topic, prompt: `Teach ${subject} for Kenyan CBC Grade ${grade}, topic ${topic}. Teach in sequence, pause after each major section, give a quiz, wait for answers, correct them, and recommend the next lesson.` }),
       });
       setTopicGuides((prev) => ({ ...prev, [subject]: { loading: false, guide: res.guide || "", error: res.error || "" } }));
     } catch (err) {
@@ -3052,14 +3055,14 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile, openChat, t
                           <p className="text-xs text-slate-400">{teacherResults[subject].reason}</p>
                         )}
 
-                        {/* AI Topic Guide */}
+                        <input value={topicDrafts[subject] || ""} onChange={(event) => setTopicDrafts((prev) => ({ ...prev, [subject]: event.target.value }))} placeholder={`Topic in ${subject}`} className="w-full rounded-xl border border-white/10 bg-slate-950/60 px-4 py-2.5 text-xs text-white outline-none focus:border-cyan-400" />
                         <button
                           type="button"
                           onClick={() => fetchTopicGuide(subject)}
                           disabled={topicGuides[subject]?.loading}
                           className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-left text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
                         >
-                          {topicGuides[subject]?.loading ? "🤖 Generating guide…" : "🤖 AI Topic-by-Topic Guide (20 KSH)"}
+                          {topicGuides[subject]?.loading ? "🤖 Teaching…" : "🤖 AI Teach (topic, grade & subject)"}
                         </button>
                         {topicGuides[subject]?.error && (
                           <p className="text-xs text-rose-400">{topicGuides[subject].error}</p>
