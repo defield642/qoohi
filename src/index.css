@@ -334,6 +334,51 @@ body, button, input, textarea, select { font-family:'Quicksand', ui-rounded, sys
   .institution-sidebar-nav button { flex:1 0 82px; }
 }
 
+/* Admin auth uses the same glass, pill, and split-panel visual language as user auth. */
+.qoohi-admin-auth {
+  position:relative;
+  overflow:hidden;
+  isolation:isolate;
+  max-width:900px !important;
+  min-height:620px;
+  margin-top:clamp(18px,5vw,60px) !important;
+  padding:clamp(28px,5vw,58px) !important;
+  border:1px solid rgba(255,255,255,.16) !important;
+  border-radius:36px !important;
+  background:linear-gradient(145deg,rgba(15,23,42,.96),rgba(8,47,73,.82)) !important;
+  box-shadow:0 30px 90px rgba(0,0,0,.45) !important;
+}
+.qoohi-admin-auth::before {
+  content:"";
+  position:absolute;
+  inset:0 54% 0 0;
+  z-index:-1;
+  background:linear-gradient(145deg,rgba(14,116,144,.6),rgba(49,46,129,.38));
+  clip-path:ellipse(90% 82% at 0 50%);
+  opacity:.82;
+}
+.qoohi-admin-auth-heading { position:relative; z-index:1; }
+.qoohi-admin-auth-heading > div:first-child { max-width:560px; }
+.qoohi-admin-auth-heading h1 { font-family:'Quicksand',sans-serif; letter-spacing:-.05em; }
+.qoohi-admin-auth-heading p:not(.text-xs) { max-width:470px; color:#cbd5e1 !important; line-height:1.65; }
+.qoohi-admin-auth-badges .rounded-full { border-color:rgba(103,232,249,.25) !important; background:rgba(103,232,249,.1) !important; color:#a5f3fc !important; }
+.qoohi-admin-auth-toggle { max-width:390px; border-color:rgba(255,255,255,.16) !important; background:rgba(2,6,23,.58) !important; }
+.qoohi-admin-auth-toggle button { min-height:44px; }
+.qoohi-admin-auth-toggle button[class*="bg-cyan-300"] { background:linear-gradient(135deg,#67e8f9,#2563eb) !important; box-shadow:0 8px 22px rgba(34,211,238,.22); }
+.qoohi-admin-form { max-width:520px; }
+.qoohi-admin-form label > span { color:#cbd5e1 !important; font-size:12px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
+.qoohi-admin-input { min-height:52px; border-radius:18px !important; background:rgba(2,6,23,.72) !important; border-color:rgba(255,255,255,.14) !important; }
+.qoohi-admin-input:focus { border-color:rgba(103,232,249,.7) !important; box-shadow:0 0 0 4px rgba(34,211,238,.1); }
+.qoohi-admin-primary { min-height:48px; border:0; background:linear-gradient(135deg,#67e8f9,#2563eb) !important; box-shadow:0 10px 26px rgba(14,165,233,.24); }
+.qoohi-admin-secondary { min-height:48px; border-color:rgba(255,255,255,.16) !important; background:rgba(255,255,255,.06) !important; }
+.qoohi-admin-pending { border-radius:24px !important; background:linear-gradient(145deg,rgba(245,158,11,.16),rgba(120,53,15,.12)) !important; }
+.qoohi-admin-auth-stage .flex.flex-wrap { align-items:center; }
+@media (max-width:640px) {
+  .qoohi-admin-auth { min-height:0; }
+  .qoohi-admin-auth::before { inset:0 0 72% 0; clip-path:ellipse(100% 90% at 50% 0); }
+  .qoohi-admin-auth-heading { padding-top:30px; }
+}
+
 .institution-tab-panel { max-width:1180px; min-height:380px; margin:0 auto; border:1px solid rgba(255,255,255,.1); border-radius:26px; background:rgba(15,23,42,.72); padding:clamp(28px,5vw,58px); box-shadow:0 22px 55px rgba(0,0,0,.22); }
 .institution-tab-panel h2 { margin:12px 0; color:#fff; font-size:clamp(28px,4vw,46px); font-weight:900; }
 .institution-tab-panel > p:not(.institution-dashboard-eyebrow) { max-width:600px; color:#94a3b8; line-height:1.8; }

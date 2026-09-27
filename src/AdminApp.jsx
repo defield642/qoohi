@@ -754,22 +754,22 @@ export default function AdminApp() {
 
       <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6">
         {!isDashboardReady && (
-          <section className="mx-auto mb-8 max-w-3xl rounded-[2.25rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl sm:p-8">
-            <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <section className="qoohi-admin-auth mx-auto mb-8 max-w-3xl rounded-[2.25rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl sm:p-8">
+            <div className="qoohi-admin-auth-heading mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Admin access</p>
-                <h1 className="mt-2 text-4xl font-black text-white">QOOHI Admin Register</h1>
+                <h1 className="mt-2 text-4xl font-black text-white">QOOHI Admin Access</h1>
                 <p className="mt-3 max-w-2xl text-sm text-slate-300">
                   Register or log in with your full name and email. We will send a 32-character code to your inbox, then unlock the dashboard after verification.
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="qoohi-admin-auth-badges flex flex-wrap gap-2">
                 <Badge>{activeAdminCount}/{ADMIN_ACCOUNT_LIMIT} admins</Badge>
                 <Badge>{adminAuthMode === "register" ? "Register" : "Login"}</Badge>
               </div>
             </div>
 
-            <div className="mb-4 flex gap-2 rounded-full border border-white/10 bg-slate-950/50 p-1">
+            <div className="qoohi-admin-auth-toggle mb-4 flex gap-2 rounded-full border border-white/10 bg-slate-950/50 p-1">
               <button
                 type="button"
                 onClick={() => {
@@ -801,8 +801,8 @@ export default function AdminApp() {
             </div>
 
             {adminAuthStage === "pending" ? (
-              <div className="space-y-4">
-                <div className="rounded-[1.25rem] border border-amber-300/20 bg-amber-400/10 px-4 py-6 text-center">
+              <div className="qoohi-admin-auth-stage space-y-4">
+                <div className="qoohi-admin-pending rounded-[1.25rem] border border-amber-300/20 bg-amber-400/10 px-4 py-6 text-center">
                   <p className="text-lg font-black text-amber-100">Verification pending</p>
                   {adminAuthStatus && (
                     <p className="mt-3 text-sm text-amber-200/80">{adminAuthStatus}</p>
@@ -814,7 +814,7 @@ export default function AdminApp() {
                     type="button"
                     onClick={checkAdminVerification}
                     disabled={checkingVerification}
-                    className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="qoohi-admin-primary inline-flex items-center gap-2 rounded-full bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <FaCheck /> {checkingVerification ? "Checking..." : "Check verification status"}
                   </button>
@@ -826,21 +826,21 @@ export default function AdminApp() {
                       setAdminAuthStatus("");
                       setAdminAuthError("");
                     }}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                    className="qoohi-admin-secondary inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
                   >
                     Use a different email
                   </button>
                 </div>
               </div>
             ) : adminAuthStage === "form" ? (
-              <form className="space-y-4" onSubmit={requestAdminCode}>
+              <form className="qoohi-admin-form space-y-4" onSubmit={requestAdminCode}>
                 {adminAuthMode === "register" && (
                   <Field label="Full name">
                     <input
                       value={adminAuthForm.fullName}
                       onChange={(event) => setAdminAuthForm((current) => ({ ...current, fullName: event.target.value }))}
                       placeholder="Your full name"
-                      className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+                      className="qoohi-admin-input w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
                     />
                   </Field>
                 )}
@@ -850,35 +850,35 @@ export default function AdminApp() {
                     value={adminAuthForm.email}
                     onChange={(event) => setAdminAuthForm((current) => ({ ...current, email: event.target.value }))}
                     placeholder="admin@example.com"
-                    className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+                    className="qoohi-admin-input w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
                   />
                 </Field>
                 <div className="flex flex-wrap gap-3">
                   <button
                     type="submit"
                     disabled={sendingAdminCode}
-                    className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="qoohi-admin-primary inline-flex items-center gap-2 rounded-full bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <FaEnvelope /> {sendingAdminCode ? "Sending..." : "Send code"}
                   </button>
                   <button
                     type="button"
                     onClick={() => setAdminAuthMode((current) => (current === "register" ? "login" : "register"))}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                    className="qoohi-admin-secondary inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
                   >
                     {adminAuthMode === "register" ? "Have a login?" : "Need to register?"}
                   </button>
                 </div>
               </form>
             ) : (
-              <form className="space-y-4" onSubmit={verifyAdminCode}>
+              <form className="qoohi-admin-form space-y-4" onSubmit={verifyAdminCode}>
                 <Field label="Email address">
                   <input
                     type="email"
                     value={adminAuthForm.email}
                     onChange={(event) => setAdminAuthForm((current) => ({ ...current, email: event.target.value }))}
                     placeholder="admin@example.com"
-                    className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+                    className="qoohi-admin-input w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
                   />
                 </Field>
                 <Field label="Verification code">
@@ -886,7 +886,7 @@ export default function AdminApp() {
                     value={adminAuthForm.code}
                     onChange={(event) => setAdminAuthForm((current) => ({ ...current, code: event.target.value }))}
                     placeholder="Paste the 32-character code"
-                    className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 font-mono tracking-[0.2em] text-white outline-none focus:border-cyan-300/60"
+                    className="qoohi-admin-input w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 font-mono tracking-[0.2em] text-white outline-none focus:border-cyan-300/60"
                   />
                 </Field>
                 {adminAuthMode === "register" && (
@@ -895,7 +895,7 @@ export default function AdminApp() {
                       value={adminAuthForm.fullName}
                       onChange={(event) => setAdminAuthForm((current) => ({ ...current, fullName: event.target.value }))}
                       placeholder="Your full name"
-                      className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
+                      className="qoohi-admin-input w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60"
                     />
                   </Field>
                 )}
@@ -903,7 +903,7 @@ export default function AdminApp() {
                   <button
                     type="submit"
                     disabled={verifyingAdminCode}
-                    className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="qoohi-admin-primary inline-flex items-center gap-2 rounded-full bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <FaCheck /> {verifyingAdminCode ? "Verifying..." : "Verify code"}
                   </button>
@@ -915,7 +915,7 @@ export default function AdminApp() {
                       setAdminAuthStatus("");
                       setAdminAuthError("");
                     }}
-                    className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+                    className="qoohi-admin-secondary inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
                   >
                     Edit details
                   </button>

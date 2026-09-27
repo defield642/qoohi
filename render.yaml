@@ -25,6 +25,10 @@ services:
         sync: false
       - key: SMTP_SECURE
         value: "true"
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
       - key: FRONTEND_ORIGIN
         value: https://qoohi-web.onrender.com
       - key: USER_APP_URL
