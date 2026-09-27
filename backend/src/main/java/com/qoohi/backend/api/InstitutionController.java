@@ -19,7 +19,7 @@ public class InstitutionController {
 
   @PostMapping("/schools/register") public Map<String,Object> register(@RequestBody Map<String,Object> b){
     String email=auth.normalize(str(b,"email")); if(db.queryForObject("SELECT count(*) FROM institutions WHERE email=?",Integer.class,email)>0) throw new IllegalArgumentException("Institution email is already registered.");
-    Long existing=firstLong("SELECT id FROM users WHERE lower(email)=lower(?)",email); long owner=existing==null?db.queryForObject("INSERT INTO users(full_name,email,role,whatsapp) VALUES (?,?, 'institution',?) RETURNING id",Long.class,str(b,"name"),email,str(b,"phone")):existing; UUID id=UUID.randomUUID();
+    long owner=db.queryForObject("INSERT INTO users(full_name,email,role,whatsapp) VALUES (?,?, 'institution',?) ON CONFLICT (email) DO UPDATE SET email=EXCLUDED.email RETURNING id",Long.class,str(b,"name"),email,str(b,"phone")); UUID id=UUID.randomUUID();
     db.update("INSERT INTO institutions(id,name,email,location,phone,school_type,logo_url,motto,latitude,longitude,owner_user_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",id,str(b,"name"),email,str(b,"location"),str(b,"phone"),defaultValue(b,"school_type","junior"),str(b,"logo_url"),str(b,"motto"),num(b,"latitude"),num(b,"longitude"),owner);
     auth.sendCode(email,"institution_register"); return Map.of("ok",true,"message","Verification code sent to the institution email.");
   }
