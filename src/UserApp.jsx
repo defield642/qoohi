@@ -2896,7 +2896,7 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile, openChat, t
         </button>
       </div>
 
-      {uploadedBooks.length > 0 && <div className="mb-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-4"><p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">Uploaded IEP books</p><div className="mt-3 grid gap-2 sm:grid-cols-2">{uploadedBooks.map((book) => <a key={book.id} href={`${API_BASE}/api/iep-books/${book.id}/download`} className="rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm font-bold text-white transition hover:border-emerald-300/40"><span className="block">{book.title}</span><span className="mt-1 block text-xs text-emerald-300">{book.subject} · Grade {book.grade} · Open PDF</span></a>)}</div></div>}
+      {uploadedBooks.length > 0 && <div className="mb-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-4"><p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">Uploaded IEP books</p><div className="mt-3 grid gap-2 sm:grid-cols-2">{uploadedBooks.map((book) => <a key={book.id} href={`${API_BASE}/api/iep-books/${book.id}/download`} className="rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm font-bold text-white transition hover:border-emerald-300/40"><span className="block">{book.title}</span><span className="mt-1 block text-xs text-emerald-300">{book.subject} · Grade {book.grade} · Download book archive</span></a>)}</div></div>}
 
       {matError && <p className="mb-4 text-sm text-rose-400">{matError}</p>}
 
