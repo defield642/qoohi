@@ -2658,13 +2658,22 @@ const SUBJECT_GRADIENTS = {
 
 function buildIepPdf(title, content) {
   const escapePdf = (value) => String(value).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
-  const lines = [`QOOHI PHYSICAL IEP BOOK`, title, "", ...String(content || "").split(/\r?\n/)].flatMap((line) => {
+  const lines = [title, "", ...String(content || "").split(/\r?\n/)].flatMap((line) => {
     const words = String(line).split(/\s+/); const wrapped = []; let current = "";
     words.forEach((word) => { if ((current + " " + word).trim().length > 88) { wrapped.push(current); current = word; } else current = `${current} ${word}`.trim(); });
     wrapped.push(current); return wrapped;
-  }).filter(Boolean).slice(0, 52);
-  const text = ["BT", "/F1 18 Tf", "72 750 Td", `(${escapePdf(lines.shift() || "QOOHI")}) Tj`, "/F1 13 Tf", ...lines.flatMap((line) => [`0 -22 Td`, `(${escapePdf(line)}) Tj`]), "ET"].join("\n");
-  const objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>", `<< /Length ${text.length} >>\nstream\n${text}\nendstream`, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"];
+  }).filter(Boolean).map((line) => String(line).replace(/[^\x20-\x7E]/g, " "));
+  const pageCount = 100; const pages = []; const colors = [[0.95,0.98,1],[1,0.96,0.96],[0.96,1,0.97],[1,0.98,0.9],[0.96,0.95,1]];
+  for (let page = 0; page < pageCount; page += 1) {
+    const [r,g,b] = colors[page % colors.length]; const pageLines = lines.slice((page * 24) % Math.max(lines.length, 1), ((page * 24) % Math.max(lines.length, 1)) + 24);
+    const heading = page === 0 ? "QOOHI PHYSICAL IEP BOOK" : `${title} — PAGE ${page + 1} OF ${pageCount}`;
+    const body = ["q", `${r} ${g} ${b} rg`, "0 0 612 792 re", "f", "Q", "BT", "/F1 22 Tf", "72 730 Td", `(${escapePdf(heading)}) Tj`, "/F1 12 Tf", ...pageLines.flatMap((line) => ["0 -24 Td", `(${escapePdf(line)}) Tj`]), "ET"].join("\n");
+    pages.push(body);
+  }
+  const pageRefs = pages.map((_, index) => `${3 + index * 2} 0 R`).join(" ");
+  const objects = ["<< /Type /Catalog /Pages 2 0 R >>", `<< /Type /Pages /Kids [${pageRefs}] /Count ${pageCount} >>`];
+  pages.forEach((body) => { const pageObject = objects.length + 1; const contentObject = pageObject + 1; objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${pageCount * 2 + 3} 0 R >> >> /Contents ${contentObject} 0 R >>`); objects.push(`<< /Length ${body.length} >>\nstream\n${body}\nendstream`); });
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
   let pdf = "%PDF-1.4\n"; const offsets = [0];
   objects.forEach((object, index) => { offsets[index + 1] = pdf.length; pdf += `${index + 1} 0 obj\n${object}\nendobj\n`; });
   const xref = pdf.length; pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
@@ -2693,15 +2702,14 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile, openChat, t
   const [teacherResults, setTeacherResults] = useState({});
   const [topicGuides, setTopicGuides] = useState({});
   const [topicDrafts, setTopicDrafts] = useState({});
+  const [uploadedBooks, setUploadedBooks] = useState([]);
   const [downloadingImg, setDownloadingImg] = useState(null);
   const subjects = getSubjectsForGrade(grade);
 
   const gradeRef = useRef(grade);
   gradeRef.current = grade;
 
-  useEffect(() => {
-    generateSubjects(grade);
-  }, []);
+  useEffect(() => { loadAndGenerate(grade); }, []);
 
   const normalizeNoteText = (text) => {
     if (!text || typeof text !== "string") return "";
@@ -2715,15 +2723,15 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile, openChat, t
       .trim();
   };
 
-  const generateSubjects = async (g) => {
+  const generateSubjects = async (g, availableBooks = uploadedBooks) => {
     setGenerating(true);
     setMatError("");
-    const subjs = getSubjectsForGrade(g);
+    const subjs = getSubjectsForGrade(g).filter((subject) => !availableBooks.some((book) => String(book.subject).toLowerCase() === subject.toLowerCase()));
     try {
       const generatedEntries = await Promise.all(
         subjs.map(async (subj) => {
           const language = /kiswahili|swahili/i.test(subj) ? "kiswahili" : "english";
-          const prompt = `Create comprehensive Grade ${g} Kenyan CBC curriculum notes for ${subj}. Include a title, learning objectives, main concepts, activities, revision questions, and examples relevant to Kenya. Use ${language === "kiswahili" ? "Kiswahili" : "English"} only. Return plain text with clear sections and no markdown symbols.`;
+          const prompt = `Create accurate Kenyan CBC Grade ${g} ${subj} physical IEP book content. Follow the current Kenyan CBC learning-area structure and use ${language === "kiswahili" ? "Kiswahili" : "English"} only. Organize the manuscript into 100 numbered pages with a title page, learner profile and IEP goals, measurable learning outcomes, prerequisite skills, sequenced units, teacher-guided activities, learner activities, locally relevant Kenyan examples, inclusive adaptations, vocabulary, formative checks, revision exercises, and answer keys. Do not invent curriculum facts; clearly mark teacher notes where a school should adapt the content. Return plain text with clear PAGE 1, PAGE 2 headings and no markdown symbols.`;
           const res = await fetchJson("/api/ai/materials", {
             method: "POST",
             headers: { ...authHeaders, "Content-Type": "application/json" },
@@ -2739,6 +2747,17 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile, openChat, t
       setMatError(err.message);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const loadAndGenerate = async (g) => {
+    try {
+      const result = await fetchJson(`/api/iep-books?grade=${encodeURIComponent(g)}`, { headers: { ...authHeaders } });
+      const books = result.books || [];
+      setUploadedBooks(books);
+      await generateSubjects(g, books);
+    } catch (err) {
+      setUploadedBooks([]); setMatError(err.message); await generateSubjects(g, []);
     }
   };
 
@@ -2823,7 +2842,7 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile, openChat, t
     setOpenTeacherPanel(null);
     setTeacherResults({});
     setTopicGuides({});
-    generateSubjects(g);
+    loadAndGenerate(g);
   };
 
   const downloadAs = async (format, subject, content) => {
@@ -2876,6 +2895,8 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile, openChat, t
           Generate Images
         </button>
       </div>
+
+      {uploadedBooks.length > 0 && <div className="mb-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 p-4"><p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-300">Uploaded IEP books</p><div className="mt-3 grid gap-2 sm:grid-cols-2">{uploadedBooks.map((book) => <a key={book.id} href={`${API_BASE}/api/iep-books/${book.id}/download`} className="rounded-xl border border-white/10 bg-slate-950/50 px-4 py-3 text-sm font-bold text-white transition hover:border-emerald-300/40"><span className="block">{book.title}</span><span className="mt-1 block text-xs text-emerald-300">{book.subject} · Grade {book.grade} · Open PDF</span></a>)}</div></div>}
 
       {matError && <p className="mb-4 text-sm text-rose-400">{matError}</p>}
 

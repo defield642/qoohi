@@ -11,6 +11,10 @@ spring:
       mail.smtp.auth: true
       mail.smtp.ssl.enable: ${SMTP_SECURE:true}
       mail.smtp.starttls.enable: ${SMTP_STARTTLS:false}
+  servlet:
+    multipart:
+      max-file-size: ${IEP_BOOK_MAX_FILE_SIZE:50MB}
+      max-request-size: ${IEP_BOOK_MAX_REQUEST_SIZE:55MB}
 qoohi:
   frontend-origin: ${FRONTEND_ORIGIN:http://localhost:5000}
   google-maps-api-key: ${GOOGLE_MAPS_API_KEY:}

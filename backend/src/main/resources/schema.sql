@@ -58,6 +58,17 @@ CREATE TABLE IF NOT EXISTS ai_settings (
  setting_value TEXT NOT NULL DEFAULT '',
  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS iep_books (
+ id BIGSERIAL PRIMARY KEY,
+ grade INT NOT NULL CHECK (grade BETWEEN 1 AND 12),
+ subject VARCHAR(160) NOT NULL,
+ title VARCHAR(240) NOT NULL,
+ filename VARCHAR(255) NOT NULL,
+ content_type VARCHAR(120) NOT NULL DEFAULT 'application/pdf',
+ content BYTEA NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ UNIQUE(grade, subject)
+);
 
 ALTER TABLE auth_codes ADD COLUMN IF NOT EXISTS metadata_json TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS secondary_roles TEXT NOT NULL DEFAULT '';

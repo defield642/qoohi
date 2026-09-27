@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   FaChalkboardTeacher,
+  FaBookOpen,
   FaCheck,
   FaChevronRight,
   FaCrown,
@@ -45,6 +46,7 @@ const DEFAULT_FINANCE_COLUMNS = [
 ];
 
 const ADMIN_ACCOUNT_LIMIT = 5;
+const IEP_UPLOAD_SUBJECTS = ["English", "Kiswahili", "Mathematics", "Environmental Activities", "Science & Technology", "Integrated Science", "Social Studies", "Religious Education", "Creative Arts", "Physical & Health Education", "Agriculture", "Home Science", "Business Studies", "Life Skills", "Physical Education", "Visual Arts", "Performing Arts", "Computer Science"];
 
 const groupIcons = {
   computer_packages: FaLaptopCode,
@@ -188,6 +190,8 @@ export default function AdminApp() {
   const [sendingAdminCode, setSendingAdminCode] = useState(false);
   const [verifyingAdminCode, setVerifyingAdminCode] = useState(false);
   const [checkingVerification, setCheckingVerification] = useState(false);
+  const [iepUploadForm, setIepUploadForm] = useState({ grade: "1", subject: "English", title: "", file: null });
+  const [uploadingIepBook, setUploadingIepBook] = useState(false);
   const [adminPendingEmail, setAdminPendingEmail] = useState("");
   const [openRouterApiKey, setOpenRouterApiKey] = useState("");
   const [savingAiKey, setSavingAiKey] = useState(false);
@@ -201,6 +205,7 @@ export default function AdminApp() {
     { id: "groups", Icon: FaUsers, label: "Groups" },
     { id: "admins", Icon: FaUserShield, label: "Admins" },
     { id: "ai", Icon: FaRobot, label: "AI" },
+    { id: "iep-books", Icon: FaBookOpen, label: "IEP Books" },
   ];
   const backgroundImages = [bg1, bg2, bg3, bg4, bg5, bg6];
   const [bgIndex, setBgIndex] = useState(0);
@@ -692,6 +697,22 @@ export default function AdminApp() {
     } finally {
       setSavingAiKey(false);
     }
+  };
+
+  const uploadIepBook = async (event) => {
+    event.preventDefault();
+    if (!iepUploadForm.file) { setError("Choose a PDF IEP book first."); return; }
+    setUploadingIepBook(true); setError(""); setAdminStatus("");
+    try {
+      const formData = new FormData();
+      formData.append("grade", iepUploadForm.grade); formData.append("subject", iepUploadForm.subject); formData.append("title", iepUploadForm.title); formData.append("file", iepUploadForm.file);
+      const response = await fetch(`${API_BASE}/api/admin/iep-books`, { method: "POST", headers: { "x-admin-key": adminKey }, body: formData });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "IEP book upload failed.");
+      setAdminStatus("IEP book uploaded. AI will skip this grade and subject.");
+      setIepUploadForm((current) => ({ ...current, title: "", file: null }));
+      const input = document.getElementById("iep-book-file"); if (input) input.value = "";
+    } catch (err) { setError(err.message); } finally { setUploadingIepBook(false); }
   };
 
   const processDeposit = async (depositId, status) => {
@@ -1293,6 +1314,21 @@ export default function AdminApp() {
                         <input type="password" value={openRouterApiKey} onChange={(event) => setOpenRouterApiKey(event.target.value)} placeholder="sk-or-v1-..." required className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 font-mono text-white outline-none focus:border-cyan-300/60" />
                       </Field>
                       <button type="submit" disabled={savingAiKey} className="inline-flex items-center gap-2 rounded-full bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:opacity-60"><FaSave /> {savingAiKey ? "Saving..." : "Save OpenRouter key"}</button>
+                    </form>
+                  </section>
+                )}
+
+                {adminSection === "iep-books" && (
+                  <section className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl">
+                    <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">IEP library</p>
+                    <h2 className="mt-2 text-2xl font-black text-white">Upload an IEP book</h2>
+                    <p className="mt-3 max-w-2xl text-sm text-slate-300">Upload one PDF for a grade and subject. The uploaded book takes priority, so QOOHI will not generate another AI book for that selection.</p>
+                    <form onSubmit={uploadIepBook} className="mt-6 grid max-w-2xl gap-4 sm:grid-cols-2">
+                      <Field label="Grade"><select value={iepUploadForm.grade} onChange={(event) => setIepUploadForm((current) => ({ ...current, grade: event.target.value }))} className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60">{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={String(index + 1)}>Grade {index + 1}</option>)}</select></Field>
+                      <Field label="Subject"><select value={iepUploadForm.subject} onChange={(event) => setIepUploadForm((current) => ({ ...current, subject: event.target.value }))} className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60">{IEP_UPLOAD_SUBJECTS.map((subject) => <option key={subject}>{subject}</option>)}</select></Field>
+                      <Field label="Book title"><input value={iepUploadForm.title} onChange={(event) => setIepUploadForm((current) => ({ ...current, title: event.target.value }))} placeholder="Optional title" className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-white outline-none focus:border-cyan-300/60" /></Field>
+                      <Field label="PDF file"><input id="iep-book-file" type="file" accept="application/pdf,.pdf" onChange={(event) => setIepUploadForm((current) => ({ ...current, file: event.target.files?.[0] || null }))} className="w-full rounded-[1.25rem] border border-white/12 bg-slate-950/60 px-4 py-3 text-sm text-white file:mr-3 file:rounded-full file:border-0 file:bg-cyan-300 file:px-3 file:py-2 file:font-bold file:text-slate-950" required /></Field>
+                      <button type="submit" disabled={uploadingIepBook} className="sm:col-span-2 inline-flex items-center justify-center gap-2 rounded-full bg-cyan-300 px-5 py-3 text-sm font-black text-slate-950 transition hover:bg-cyan-200 disabled:opacity-60"><FaBookOpen /> {uploadingIepBook ? "Uploading..." : "Upload IEP book"}</button>
                     </form>
                   </section>
                 )}
