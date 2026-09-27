@@ -318,6 +318,14 @@ body, button, input, textarea, select { font-family:'Quicksand', ui-rounded, sys
 .institution-record,.institution-quick-actions button,.institution-profile-preview { border-radius:22px; background:rgba(255,255,255,.06); border-color:var(--qoohi-line); }
 .institution-quick-actions { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
 .institution-quick-actions button { min-height:74px; color:#dbeafe; font-weight:800; }
+.institution-place-field { position:relative; }
+.institution-place-suggestions { position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:30; overflow:hidden; border:1px solid rgba(103,232,249,.3); border-radius:18px; background:rgba(2,6,23,.98); box-shadow:0 20px 45px rgba(0,0,0,.45); }
+.institution-place-suggestions button { display:block; width:100%; padding:12px 16px; border:0; border-bottom:1px solid rgba(255,255,255,.08); background:transparent; color:#e2e8f0; cursor:pointer; text-align:left; }
+.institution-place-suggestions button:last-child { border-bottom:0; }
+.institution-place-suggestions button:hover { background:rgba(34,211,238,.14); }
+.institution-place-suggestions strong,.institution-place-suggestions small { display:block; }
+.institution-place-suggestions strong { color:#f8fafc; font-size:13px; }
+.institution-place-suggestions small { margin-top:3px; color:#94a3b8; font-size:11px; }
 
 /* Admin language: flat data remains table-like; cards/navigation get the tile treatment. */
 .app-light .mx-auto.max-w-7xl > .flex.flex-row.gap-6 > aside { width:220px !important; }
