@@ -1288,6 +1288,8 @@ function DashboardPage({
     );
   }
 
+  const enrollments = Array.isArray(dashboard.enrollments) ? dashboard.enrollments : [];
+  const messages = Array.isArray(dashboard.messages) ? dashboard.messages : [];
   const role = dashboard.student?.role || "student";
   const isTeacher = role === "teacher";
   const isParent = role === "parent";
@@ -1301,7 +1303,7 @@ function DashboardPage({
   const recentWithdrawals = Array.isArray(dashboard.withdrawals) ? dashboard.withdrawals : [];
   const profileAvatar = profileDraft.avatarUrl || dashboard.student?.avatarUrl || "";
   const fullName = profileDraft.fullName || dashboard.student.fullName;
-  const hasCourses = dashboard.enrollments && dashboard.enrollments.length > 0;
+  const hasCourses = enrollments.length > 0;
   const hasTournament = !!dashboard.tournamentRegistration;
   const canAfford = (charge) => Number(charge || 0) <= 0 || balance >= Number(charge || 0);
   const authHeaders = sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
@@ -1647,8 +1649,8 @@ function DashboardPage({
           <div className="mt-6 flex flex-wrap gap-3 border-t border-white/10 pt-6">
             {[
               { label: "Balance", value: `Ksh ${balance.toLocaleString()}`, color: "text-cyan-300", bg: "bg-cyan-500/10 border-cyan-500/20" },
-              { label: "Courses", value: dashboard.enrollments.length, color: "text-white", bg: "bg-white/5 border-white/10" },
-              { label: "Messages", value: dashboard.messages.length, color: "text-white", bg: "bg-white/5 border-white/10" },
+              { label: "Courses", value: enrollments.length, color: "text-white", bg: "bg-white/5 border-white/10" },
+              { label: "Messages", value: messages.length, color: "text-white", bg: "bg-white/5 border-white/10" },
               { label: "Status", value: assessmentStatus === "completed" ? "Assessed" : "Pending", color: assessmentStatus === "completed" ? "text-emerald-300" : "text-amber-300", bg: assessmentStatus === "completed" ? "bg-emerald-500/10 border-emerald-500/20" : "bg-amber-500/10 border-amber-500/20" },
             ].map(({ label, value, color, bg }) => (
               <div key={label} className={`flex items-center gap-2 rounded-full border px-4 py-2 ${bg}`}>
@@ -1683,14 +1685,14 @@ function DashboardPage({
                 </button>
               </div>
               {!showMessages && (
-                <p className="mt-3 text-sm text-slate-500">{dashboard.messages.length} message{dashboard.messages.length !== 1 ? "s" : ""} from your instructor.</p>
+                <p className="mt-3 text-sm text-slate-500">{messages.length} message{messages.length !== 1 ? "s" : ""} from your instructor.</p>
               )}
               {showMessages && (
                 <div className="mt-5 space-y-3">
-                  {dashboard.messages.length === 0 && (
+                  {messages.length === 0 && (
                     <p className="rounded-2xl border border-white/5 bg-white/5 px-5 py-4 text-sm text-slate-500">No messages yet.</p>
                   )}
-                  {dashboard.messages.map((message) => (
+                  {messages.map((message) => (
                     <div key={message.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-5">
                       <h4 className="font-bold text-white">{message.subject}</h4>
                       <p className="mt-2 text-sm leading-6 text-slate-400">{message.body}</p>
@@ -2100,9 +2102,9 @@ function DashboardPage({
               <SectionLabel>Course Admin</SectionLabel>
               <h3 className="mt-2 mb-6 text-2xl font-black text-white">Materials &amp; Updates</h3>
               <div className="space-y-4">
-                {dashboard.messages.length === 0
+                {messages.length === 0
                   ? <p className="py-12 text-center text-sm text-slate-600">No messages from your instructor yet.</p>
-                  : dashboard.messages.map(message => (
+                  : messages.map(message => (
                     <div key={message.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-5">
                       <h4 className="font-bold text-white">{message.subject}</h4>
                       <p className="mt-2 text-sm leading-6 text-slate-400">{message.body}</p>

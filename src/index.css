@@ -293,6 +293,9 @@ body, button, input, textarea, select { font-family:'Quicksand', ui-rounded, sys
 .qoohi-auth-toggle-panel h1,.institution-toggle-panel h2 { font-family:'Quicksand',sans-serif; }
 .qoohi-role-picker button { border-radius:999px; padding:12px; }
 .qoohi-auth-note,.qoohi-social-copy { color:#64748b !important; }
+.qoohi-auth-form .border-rose-300\/25 { border-color:rgba(251,113,133,.5) !important; background:rgba(225,29,72,.16) !important; color:#ffe4e6 !important; }
+.qoohi-auth-form .border-cyan-300\/25 { border-color:rgba(103,232,249,.45) !important; background:rgba(8,145,178,.18) !important; color:#cffafe !important; }
+.qoohi-auth-form .border-rose-300\/25,.qoohi-auth-form .border-cyan-300\/25 { font-size:14px; line-height:1.45; text-align:center; }
 
 /* Institution portal: compact icon-first tiles while retaining all tabs. */
 .institution-dashboard-shell { background:radial-gradient(circle at 78% 0%,#123b55 0,#071526 38%,#020617 82%); font-family:'Quicksand',sans-serif; }
