@@ -220,6 +220,33 @@ body { background: linear-gradient(180deg, #f4efff 0%, #fbfbff 42%, #ffffff 100%
 .institution-dashboard-eyebrow { color: #7c3aed !important; }
 .institution-dashboard-status { background: #ecfdf5 !important; color: #047857 !important; border-color: #a7f3d0 !important; }
 @media (max-width: 640px) { .institution-sidebar { width: 78px; padding-inline: 8px; } .institution-brand { justify-content: center; padding-inline: 0; } .institution-brand > div:last-child, .institution-sidebar-account p, .institution-sidebar-account strong, .institution-sidebar-account button { display: none; } .institution-sidebar-nav button { justify-content: center; padding-inline: 8px; font-size: 0; } .institution-sidebar-nav button span { font-size: 19px; } .institution-dashboard-main { padding: 28px 14px; } }
+.preview-hero, .institution-preview-shell { border-top: 6px solid #8b5cf6; }
+.preview-hero { display: flex; align-items: center; justify-content: space-between; gap: 24px; background: linear-gradient(135deg, #ffffff, #f5efff); }
+.preview-avatar { display: grid; place-items: center; width: 108px; height: 108px; flex-shrink: 0; border-radius: 36px; color: #fff; font-size: 48px; font-weight: 900; box-shadow: 0 16px 30px rgba(91,33,182,.18); transform: rotate(5deg); }
+.preview-card { position: relative; border: 1px solid #eee7ff; }
+.preview-tap-hint { position: absolute; right: 22px; top: 22px; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: #ede9fe; font-size: 22px; animation: qoohi-tap 1.1s ease-in-out infinite; }
+@keyframes qoohi-tap { 0%,100% { transform: scale(1); opacity: .9; } 50% { transform: scale(.8); opacity: .55; } }
+.institution-preview-shell { min-height: 100vh; padding: 38px clamp(18px, 5vw, 72px); background: linear-gradient(180deg, #f3edff, #fff); color: #27304a; }
+.institution-preview-top { display: flex; align-items: center; gap: 14px; max-width: 1180px; margin: 0 auto 42px; }
+.institution-preview-top h1 { margin: 5px 0 0; color: #27304a; font-size: clamp(24px, 4vw, 46px); font-weight: 900; letter-spacing: -.04em; }
+.institution-preview-actions { display: flex; gap: 10px; margin-left: auto; }
+.institution-preview-actions button, .institution-preview-hero button { border: 0; border-radius: 999px; background: #7c3aed; color: white; padding: 12px 20px; font-weight: 900; cursor: pointer; }
+.institution-preview-actions button:first-child { background: white; color: #6d28d9; box-shadow: 0 5px 18px rgba(91,33,182,.1); }
+.institution-preview-hero, .institution-preview-panels { display: grid; grid-template-columns: 1.4fr .6fr; gap: 22px; max-width: 1180px; margin: 0 auto 22px; }
+.institution-preview-hero { align-items: center; border-radius: 28px; background: white; padding: clamp(26px, 5vw, 56px); box-shadow: 0 18px 42px rgba(91,33,182,.1); }
+.institution-preview-hero h2 { margin: 8px 0 14px; color: #27304a; font-size: clamp(30px, 5vw, 62px); font-weight: 900; line-height: 1; }
+.institution-preview-hero p:not(.institution-dashboard-eyebrow) { max-width: 650px; color: #64748b; font-size: 17px; line-height: 1.7; }
+.institution-preview-orb { display: grid; place-items: center; min-height: 190px; border-radius: 34px; background: linear-gradient(135deg, #c4b5fd, #f0abfc); font-size: 74px; }
+.institution-preview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 1180px; margin: 0 auto 22px; }
+.institution-preview-grid article, .institution-preview-panels article { border: 1px solid #eee7ff; border-radius: 24px; background: white; padding: 24px; box-shadow: 0 12px 30px rgba(91,33,182,.07); }
+.institution-preview-grid span { display: block; font-size: 26px; }
+.institution-preview-grid strong { display: block; margin-top: 14px; color: #6d28d9; font-size: 30px; font-weight: 900; }
+.institution-preview-grid small, .institution-preview-panels article > p:not(.institution-dashboard-eyebrow) { color: #718096; }
+.institution-preview-panels h3 { margin: 8px 0 18px; color: #27304a; font-size: 24px; font-weight: 900; }
+.institution-preview-list { display: grid; gap: 10px; }
+.institution-preview-list span { display: flex; justify-content: space-between; border-radius: 12px; background: #f7f3ff; padding: 12px; color: #64748b; font-size: 13px; }
+.institution-preview-list b { color: #7c3aed; }
+@media (max-width: 700px) { .preview-hero, .institution-preview-top { align-items: flex-start; flex-wrap: wrap; } .preview-avatar { width: 76px; height: 76px; font-size: 32px; border-radius: 26px; } .institution-preview-top .institution-preview-actions { width: 100%; margin-left: 0; } .institution-preview-hero, .institution-preview-panels { grid-template-columns: 1fr; } .institution-preview-grid { grid-template-columns: repeat(2, 1fr); } }
 
 /* Institution dashboard aligned with the QOOHI user dashboard */
 .institution-dashboard-shell { min-height:100vh; display:flex; background:linear-gradient(145deg,#020617,#0b172a 55%,#082f49); color:#fff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; }

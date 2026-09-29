@@ -25,6 +25,7 @@ export default function InstitutionApp() {
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
 
   const update = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
   const refresh = async (activeToken = token) => {
@@ -91,6 +92,7 @@ export default function InstitutionApp() {
   };
 
   if (token && data?.institution) return <InstitutionDashboard data={data} token={token} refresh={refresh} onSignOut={signOut} />;
+  if (showPreview) return <InstitutionPreview onOpenAuth={(nextMode) => { setMode(nextMode); setShowPreview(false); }} />;
 
   return <main className={`institution-auth ${mode === "register" ? "active" : ""}`}>
     <section className="institution-form-panel">
@@ -115,6 +117,10 @@ export default function InstitutionApp() {
     </section>
     <section className="institution-toggle"><div className="institution-toggle-inner"><div className="institution-toggle-panel institution-left"><h2>Welcome Back!</h2><p>Already have an account?</p><button className="institution-ghost" type="button" onClick={() => setMode("login")}>Login</button></div><div className="institution-toggle-panel institution-right"><h2>Hello, Welcome</h2><p>Register your institution</p><button className="institution-ghost" type="button" onClick={() => setMode("register")}>Register</button></div></div></section>
   </main>;
+}
+
+function InstitutionPreview({ onOpenAuth }) {
+  return <main className="institution-preview-shell"><header className="institution-preview-top"><div className="institution-brand-mark">Q</div><div><p className="institution-dashboard-eyebrow">QOOHI for institutions</p><h1>One calm workspace for every learner.</h1></div><div className="institution-preview-actions"><button type="button" onClick={() => onOpenAuth("login")}>Login</button><button type="button" onClick={() => onOpenAuth("register")}>Register</button></div></header><section className="institution-preview-hero"><div><p className="institution-dashboard-eyebrow">Demo institution workspace</p><h2>Connect classes, teachers, and families.</h2><p>Preview learner rosters, CBC classes, teaching teams, recommendations, and school settings before opening your institution account.</p><button type="button" onClick={() => onOpenAuth("register")}>Create institution workspace</button></div><div className="institution-preview-orb">🏫</div></section><section className="institution-preview-grid"><article><span>👩‍🎓</span><strong>428</strong><small>Learners supported</small></article><article><span>📘</span><strong>18</strong><small>CBC classes</small></article><article><span>🧑‍🏫</span><strong>32</strong><small>Teaching team</small></article><article><span>📍</span><strong>Kenya</strong><small>Location-aware support</small></article></section><section className="institution-preview-panels"><article><p className="institution-dashboard-eyebrow">Class snapshot</p><h3>Grade 6 · Blue</h3><div className="institution-preview-list"><span>Progress checks <b>86%</b></span><span>Parent connections <b>24</b></span><span>Teacher recommendations <b>12</b></span></div></article><article><p className="institution-dashboard-eyebrow">Built for schools</p><h3>From registration to insight</h3><p>Register a learner inside their class, add teachers, and keep every family update in one secure place.</p></article></section></main>;
 }
 
 function InstitutionDashboard({ data, token, refresh, onSignOut }) {

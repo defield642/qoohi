@@ -437,21 +437,7 @@ export default function UserApp() {
                 logout={logout}
                 unreadNotifs={unreadNotifs}
                 openChat={openChat}
-              />) : <LoginPage
-                statusMessage={statusMessage}
-                onSubmit={(payload) =>
-                  handleCodeRequest({ ...payload, mode: "login" })
-                }
-                onGoToRegister={(page) => {
-                  if (page === "parent") {
-                    setRegistrationTarget({ type: "parent", packageKey: "" });
-                    goTo("register");
-                  } else if (page === "teacher") {
-                    setRegistrationTarget({ type: "teacher", packageKey: "" });
-                    goTo("register");
-                  }
-                }}
-              />
+              />) : <PreviewDashboard goTo={goTo} />
             )}
             {route === "register" && (
               <RegisterPage
@@ -1194,6 +1180,43 @@ function RegisterPage({ registrationTarget, onSubmit, statusMessage }) {
 function VerifyPage({ pendingVerification, onVerify, statusMessage }) {
   const [code, setCode] = useState(""); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const submit = async (event) => { event.preventDefault(); setBusy(true); setError(""); try { await onVerify({ ...pendingVerification, code }); } catch (err) { setError(err.message); } finally { setBusy(false); } };
   return <AuthShell><form className="space-y-5" onSubmit={submit}><h1>Verify Email</h1><label className="block"><span className="mb-2 block text-sm font-bold text-slate-200">Six-digit code</span><input autoFocus required inputMode="numeric" maxLength="6" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} className="w-full rounded-[1.25rem] border border-cyan-300/30 bg-slate-950/60 px-5 py-5 text-center text-3xl font-black tracking-[.45em] text-white outline-none focus:border-cyan-300" placeholder="000000" /></label>{(error || statusMessage) && <Notice tone={error ? "error" : "info"}>{error || statusMessage}</Notice>}<ActionButton disabled={busy || code.length < 4} type="submit" className="w-full">{busy ? "Verifying..." : "Verify email"}</ActionButton></form></AuthShell>;
+}
+
+function PreviewDashboard({ goTo }) {
+  const [role, setRole] = useState("parent");
+  const [aiStartedAt, setAiStartedAt] = useState(null);
+  const [secondsLeft, setSecondsLeft] = useState(180);
+  const roles = {
+    parent: { name: "Amina Otieno", title: "Parent dashboard", accent: "#8b5cf6", stat: "3 learners", note: "Track progress and connect with trusted teachers." },
+    teacher: { name: "James Mwangi", title: "Teacher dashboard", accent: "#ec4899", stat: "24 learners", note: "Organise classes, share assignments, and guide every learner." },
+    student: { name: "Brian Kamau", title: "Student dashboard", accent: "#f59e0b", stat: "Grade 8", note: "Learn step by step, practise, and ask for support." },
+  };
+  const current = roles[role];
+  useEffect(() => {
+    if (!aiStartedAt) return undefined;
+    const timer = setInterval(() => {
+      const remaining = Math.max(0, 180 - Math.floor((Date.now() - aiStartedAt) / 1000));
+      setSecondsLeft(remaining);
+      if (!remaining) { clearInterval(timer); setAiStartedAt(null); goTo("register"); }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [aiStartedAt, goTo]);
+  const startAi = () => { if (!aiStartedAt) { setAiStartedAt(Date.now()); setSecondsLeft(180); } };
+  return <section className="preview-dashboard mx-auto max-w-6xl">
+    <div className="preview-hero rounded-[2rem] p-6 shadow-sm sm:p-10">
+      <div><p className="text-xs font-black uppercase tracking-[.28em] text-violet-600">QOOHI preview</p><h1 className="mt-3 text-3xl font-black text-slate-900 sm:text-5xl">See your learning world in one place.</h1><p className="mt-4 max-w-2xl text-slate-600">Explore a realistic {current.title.toLowerCase()} before you register. Your data and progress will be private to your account.</p></div>
+      <div className="preview-avatar" style={{ background: current.accent }}>{current.name[0]}</div>
+    </div>
+    <div className="mt-5 flex gap-2 rounded-2xl bg-white p-2 shadow-sm" role="tablist">{Object.entries(roles).map(([key, item]) => <button key={key} type="button" onClick={() => setRole(key)} className={`flex-1 rounded-xl px-3 py-3 text-sm font-black capitalize transition ${role === key ? "text-white shadow" : "text-slate-500 hover:bg-violet-50"}`} style={role === key ? { background: item.accent } : undefined}>{key}</button>)}</div>
+    <div className="mt-5 grid gap-5 lg:grid-cols-[1.5fr_1fr]">
+      <div className="grid gap-5 sm:grid-cols-2">
+        <div className="preview-card relative rounded-[1.5rem] bg-white p-6 shadow-sm"><span className="preview-tap-hint">☝</span><p className="text-sm font-bold text-slate-500">Welcome back</p><h2 className="mt-2 text-2xl font-black text-slate-900">{current.name}</h2><p className="mt-1 text-sm text-slate-500">{current.note}</p><div className="mt-6 flex items-end justify-between"><strong className="text-3xl font-black" style={{ color: current.accent }}>{current.stat}</strong><span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700">On track</span></div></div>
+        <div className="preview-card rounded-[1.5rem] bg-white p-6 shadow-sm"><p className="text-sm font-bold text-slate-500">Weekly activity</p><div className="mt-6 flex h-24 items-end gap-2">{[35,62,48,80,55,72,90].map((height, index) => <span key={index} className="flex-1 rounded-t-lg" style={{ height: `${height}%`, background: index === 6 ? current.accent : "#ddd6fe" }} />)}</div><p className="mt-3 text-xs font-bold text-slate-400">Learning minutes · 7 day view</p></div>
+        <div className="preview-card rounded-[1.5rem] bg-white p-6 shadow-sm sm:col-span-2"><div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[.2em] text-violet-600">AI learning coach</p><h2 className="mt-2 text-xl font-black text-slate-900">Personalised lessons and quizzes</h2></div><span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-700">3 min free</span></div><p className="mt-3 text-sm text-slate-500">Choose a subject, grade, and topic. QOOHI teaches in sequence and checks understanding after each section.</p><button type="button" onClick={startAi} className="mt-5 rounded-full bg-violet-600 px-5 py-3 text-sm font-black text-white hover:bg-violet-700">{aiStartedAt ? `AI preview · ${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}` : "Try AI teaching"}</button></div>
+      </div>
+      <div className="preview-card rounded-[1.5rem] bg-white p-6 shadow-sm"><div className="flex items-center justify-between"><div><p className="text-xs font-black uppercase tracking-[.2em] text-amber-600">IEP BOOK</p><h2 className="mt-2 text-2xl font-black text-slate-900">Kenyan CBC learning book</h2></div><span className="text-3xl">📚</span></div><p className="mt-4 text-sm text-slate-500">Structured lessons, inclusive activities, revision checks, and parent-friendly progress notes.</p><div className="mt-6 rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-500 p-5 text-white"><p className="text-xs font-black uppercase tracking-widest text-white/75">Preview copy</p><p className="mt-2 text-lg font-black">Grade 6 · Mathematics</p><p className="mt-1 text-sm text-white/80">Fractions and problem solving</p></div><button type="button" onClick={() => goTo("login")} className="mt-5 w-full rounded-full border border-violet-200 bg-violet-50 px-5 py-3 text-sm font-black text-violet-700 hover:bg-violet-100">Register to download</button></div>
+    </div>
+  </section>;
 }
 
 function DashboardPage({
