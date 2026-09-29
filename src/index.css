@@ -190,6 +190,37 @@ body {
 @media(max-width:760px) { .institution-dashboard-header,.institution-dashboard-welcome { flex-direction:column; } .institution-stat-grid,.institution-dashboard-grid { grid-template-columns:1fr 1fr; } }
 @media(max-width:480px) { .institution-stat-grid,.institution-dashboard-grid { grid-template-columns:1fr; } .institution-dashboard { padding:24px 16px; } }
 
+/* ClassDojo-style shared dashboard canvas. Navigation stays visible on every width. */
+body { background: linear-gradient(180deg, #f4efff 0%, #fbfbff 42%, #ffffff 100%); }
+.app-light { position: relative; background: linear-gradient(180deg, #f3edff 0%, #fbfbff 44%, #ffffff 100%) !important; color: #27304a; font-family: 'Quicksand', ui-sans-serif, system-ui, sans-serif; }
+.app-light::before, .institution-dashboard-shell::before { content: ""; position: fixed; inset: 0 0 auto; z-index: 0; height: 7px; background: linear-gradient(90deg, #7c3aed, #c084fc, #f0abfc); pointer-events: none; }
+.app-light > *, .institution-dashboard-shell > * { position: relative; z-index: 1; }
+.app-light .rounded-2xl, .app-light .rounded-3xl, .app-light .rounded-\[2rem\], .app-light .rounded-\[2\.25rem\], .app-light .rounded-\[2\.5rem\] { border-radius: 1.35rem; }
+.app-light .bg-white\/10, .app-light .bg-white\/5, .app-light .bg-slate-900\/90, .app-light .bg-slate-950\/60 { background-color: rgba(255,255,255,.94) !important; }
+.app-light aside > div, .app-light main > div > aside > div { border-color: #e9ddff !important; background: rgba(255,255,255,.96) !important; box-shadow: 0 14px 36px rgba(91, 33, 182, .10); }
+.app-light nav button:nth-child(4n+1) svg { color: #8b5cf6 !important; }
+.app-light nav button:nth-child(4n+2) svg { color: #ec4899 !important; }
+.app-light nav button:nth-child(4n+3) svg { color: #f59e0b !important; }
+.app-light nav button:nth-child(4n) svg { color: #10b981 !important; }
+.app-light nav button:hover, .app-light nav button[class*="bg-cyan"] { background: #f1eaff !important; color: #6d28d9 !important; }
+.app-light nav button { min-height: 42px; }
+.institution-dashboard-shell { position: relative; min-height: 100vh; background: linear-gradient(180deg, #f3edff 0%, #fbfbff 44%, #ffffff 100%) !important; color: #27304a !important; font-family: 'Quicksand', ui-sans-serif, system-ui, sans-serif !important; }
+.institution-sidebar { background: rgba(255,255,255,.96) !important; border-right-color: #e9ddff !important; box-shadow: 8px 0 28px rgba(91,33,182,.08); }
+.institution-brand { border-bottom-color: #eee6ff !important; }
+.institution-brand b, .institution-topbar h1, .institution-hero-card h2, .institution-dashboard-grid h3, .institution-content-card h3 { color: #27304a !important; }
+.institution-brand small, .institution-topbar p:not(.institution-dashboard-eyebrow), .institution-content-card > p:not(.institution-dashboard-eyebrow), .institution-profile-row, .institution-stat-grid span, .institution-stat-grid small { color: #718096 !important; }
+.institution-sidebar-nav button { color: #64748b !important; }
+.institution-sidebar-nav button:nth-child(4n+1) span { color: #8b5cf6; }
+.institution-sidebar-nav button:nth-child(4n+2) span { color: #ec4899; }
+.institution-sidebar-nav button:nth-child(4n+3) span { color: #f59e0b; }
+.institution-sidebar-nav button:nth-child(4n) span { color: #10b981; }
+.institution-sidebar-nav button:hover, .institution-sidebar-nav button.active { background: #f1eaff !important; color: #6d28d9 !important; }
+.institution-hero-card, .institution-content-card, .institution-stat-grid > div, .institution-dashboard-grid article { background: rgba(255,255,255,.96) !important; border-color: #e9ddff !important; box-shadow: 0 14px 36px rgba(91,33,182,.09) !important; }
+.institution-hero-card p:not(.institution-dashboard-eyebrow) { color: #64748b !important; }
+.institution-dashboard-eyebrow { color: #7c3aed !important; }
+.institution-dashboard-status { background: #ecfdf5 !important; color: #047857 !important; border-color: #a7f3d0 !important; }
+@media (max-width: 640px) { .institution-sidebar { width: 78px; padding-inline: 8px; } .institution-brand { justify-content: center; padding-inline: 0; } .institution-brand > div:last-child, .institution-sidebar-account p, .institution-sidebar-account strong, .institution-sidebar-account button { display: none; } .institution-sidebar-nav button { justify-content: center; padding-inline: 8px; font-size: 0; } .institution-sidebar-nav button span { font-size: 19px; } .institution-dashboard-main { padding: 28px 14px; } }
+
 /* Institution dashboard aligned with the QOOHI user dashboard */
 .institution-dashboard-shell { min-height:100vh; display:flex; background:linear-gradient(145deg,#020617,#0b172a 55%,#082f49); color:#fff; font-family:Inter,ui-sans-serif,system-ui,sans-serif; }
 .institution-sidebar { width:250px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid rgba(255,255,255,.1); background:rgba(2,6,23,.76); padding:26px 14px; backdrop-filter:blur(22px); }

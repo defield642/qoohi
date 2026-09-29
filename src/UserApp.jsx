@@ -453,8 +453,6 @@ export default function UserApp() {
                 }}
               />
             )}
-            {route === "about" && <AboutPage goTo={goTo} />}
-                        {route === "contact" && <ContactPage />}
             {route === "register" && (
               <RegisterPage
                 registrationTarget={registrationTarget}
@@ -590,19 +588,8 @@ export default function UserApp() {
   );
 }
 
-const menuNavItems = [
-  { id: "about", label: "About" },
-  { id: "contact", label: "Contact" },
-];
-
 function Header({ route, goTo, dashboard }) {
   const [logoFailed, setLogoFailed] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  const handleMenu = (id) => {
-    goTo(id);
-    setMenuOpen(false);
-  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/5 bg-slate-950/80 shadow-2xl backdrop-blur-2xl">
@@ -661,50 +648,6 @@ function Header({ route, goTo, dashboard }) {
               {dashboard ? "Dashboard" : "Login"}
             </button>
 
-            {/* Menu Button */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setMenuOpen((o) => !o)}
-                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
-                  menuOpen
-                    ? "bg-white/15 text-white"
-                    : "border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
-                }`}
-              >
-                <span className="flex flex-col gap-[3px]">
-                  <span className={`block h-[2px] w-4 rounded-full bg-current transition-all ${menuOpen ? "translate-y-[5px] rotate-45" : ""}`} />
-                  <span className={`block h-[2px] w-4 rounded-full bg-current transition-all ${menuOpen ? "opacity-0" : ""}`} />
-                  <span className={`block h-[2px] w-4 rounded-full bg-current transition-all ${menuOpen ? "-translate-y-[5px] -rotate-45" : ""}`} />
-                </span>
-                <span className="hidden sm:inline">Menu</span>
-              </button>
-
-              {/* Dropdown */}
-              {menuOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-                  <div className="absolute right-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-2xl border border-white/15 bg-slate-950/95 shadow-2xl shadow-black/60 backdrop-blur-2xl">
-                    <div className="p-2">
-                      {menuNavItems.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => handleMenu(item.id)}
-                          className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-bold transition ${
-                            route === item.id
-                              ? "bg-cyan-500/20 text-cyan-300"
-                              : "text-slate-300 hover:bg-white/10 hover:text-white"
-                          }`}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
           </nav>
         </div>
       </div>
@@ -927,10 +870,10 @@ function AboutPage({ goTo }) {
             To empower 1 million <span className="text-cyan-400">Kenyans</span> with the skills to <span className="text-white/60">build</span>, <span className="text-white/60">innovate</span>, and <span className="text-white/60">lead</span> in the global digital economy.
           </h2>
           <div className="mt-16 flex flex-wrap justify-center gap-6">
-            <ActionButton className="!px-12 !py-6 !text-xl shadow-[0_0_30px_rgba(34,211,238,0.3)]" onClick={() => goTo("contact")}>
+            <ActionButton className="!px-12 !py-6 !text-xl shadow-[0_0_30px_rgba(34,211,238,0.3)]" onClick={() => goTo("register")}>
               Explore Programs
             </ActionButton>
-            <SecondaryButton className="!px-12 !py-6 !text-xl" onClick={() => goTo("contact")}>
+            <SecondaryButton className="!px-12 !py-6 !text-xl" onClick={() => goTo("register")}>
               Partner With Us
             </SecondaryButton>
           </div>
@@ -3381,12 +3324,6 @@ function Footer({ goTo, openParentRegistration }) {
               <FaWhatsapp className="text-lg" />
             </a>
           </div>
-          <button 
-            onClick={() => goTo("contact")}
-            className="rounded-full bg-cyan-400/10 px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-cyan-300 border border-cyan-400/20 hover:bg-cyan-400/20 transition"
-          >
-            Support
-          </button>
         </div>
       </div>
     </footer>
