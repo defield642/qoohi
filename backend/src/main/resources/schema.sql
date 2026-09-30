@@ -94,3 +94,58 @@ CREATE TABLE IF NOT EXISTS finance (date DATE PRIMARY KEY,columns_json TEXT NOT 
 CREATE TABLE IF NOT EXISTS admin_accounts (id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL,email VARCHAR(320) UNIQUE NOT NULL,access_key TEXT UNIQUE NOT NULL,is_superadmin BOOLEAN NOT NULL DEFAULT false,active BOOLEAN NOT NULL DEFAULT true,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS chat_messages (id BIGSERIAL PRIMARY KEY,sender_id BIGINT NOT NULL REFERENCES users(id),recipient_id BIGINT NOT NULL REFERENCES users(id),body TEXT NOT NULL,read_at TIMESTAMPTZ,created_at TIMESTAMPTZ NOT NULL DEFAULT now());
 CREATE INDEX IF NOT EXISTS idx_chat_participants ON chat_messages(sender_id,recipient_id,created_at);
+
+CREATE TABLE IF NOT EXISTS teacher_classes (
+ id BIGSERIAL PRIMARY KEY,
+ teacher_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ name VARCHAR(180) NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ UNIQUE(teacher_id,name)
+);
+CREATE TABLE IF NOT EXISTS teacher_class_students (
+ class_id BIGINT NOT NULL REFERENCES teacher_classes(id) ON DELETE CASCADE,
+ student_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ PRIMARY KEY(class_id,student_user_id)
+);
+CREATE TABLE IF NOT EXISTS teacher_progress (
+ id BIGSERIAL PRIMARY KEY,
+ teacher_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ student_user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+ parent_student_id BIGINT REFERENCES parent_students(id) ON DELETE CASCADE,
+ subject VARCHAR(160) NOT NULL DEFAULT '',
+ record_type VARCHAR(30) NOT NULL,
+ value TEXT NOT NULL DEFAULT '',
+ notes TEXT NOT NULL DEFAULT '',
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ CHECK (student_user_id IS NOT NULL OR parent_student_id IS NOT NULL)
+);
+CREATE TABLE IF NOT EXISTS teacher_assignments (
+ id BIGSERIAL PRIMARY KEY,
+ teacher_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ class_id BIGINT REFERENCES teacher_classes(id) ON DELETE CASCADE,
+ title VARCHAR(240) NOT NULL,
+ filename VARCHAR(255) NOT NULL,
+ content_type VARCHAR(120) NOT NULL DEFAULT 'application/pdf',
+ content BYTEA NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS teacher_prices (
+ teacher_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ daily NUMERIC(12,2) NOT NULL DEFAULT 0,
+ weekly NUMERIC(12,2) NOT NULL DEFAULT 0,
+ monthly NUMERIC(12,2) NOT NULL DEFAULT 0,
+ six_month NUMERIC(12,2) NOT NULL DEFAULT 0,
+ yearly NUMERIC(12,2) NOT NULL DEFAULT 0,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS teacher_transactions (
+ id BIGSERIAL PRIMARY KEY,
+ teacher_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ payer_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+ amount NUMERIC(12,2) NOT NULL,
+ platform_share NUMERIC(12,2) NOT NULL DEFAULT 0,
+ teacher_share NUMERIC(12,2) NOT NULL DEFAULT 0,
+ type VARCHAR(40) NOT NULL,
+ description TEXT NOT NULL DEFAULT '',
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -202,10 +202,11 @@ export default function UserApp() {
       setTeacherOverview(null);
       return;
     }
-    fetchJson("/api/teacher/overview", {
-      headers: { Authorization: `Bearer ${sessionToken}` },
-    })
-      .then((data) => setTeacherOverview(data))
+    Promise.all([
+      fetchJson("/api/teacher/overview", { headers: { Authorization: `Bearer ${sessionToken}` } }),
+      fetchJson("/api/teacher/workspace", { headers: { Authorization: `Bearer ${sessionToken}` } }),
+    ])
+      .then(([overview, workspace]) => setTeacherOverview({ ...overview, ...workspace }))
       .catch(() => setTeacherOverview(null));
   }, [dashboard, sessionToken]);
 
@@ -425,10 +426,11 @@ export default function UserApp() {
                         body: JSON.stringify({ assessmentStatus, performanceLevel }),
                       });
                     }
-                    const refreshed = await fetchJson("/api/teacher/overview", {
-                      headers: { Authorization: `Bearer ${sessionToken}` },
-                    });
-                    setTeacherOverview(refreshed);
+                    const [overview, workspace] = await Promise.all([
+                      fetchJson("/api/teacher/overview", { headers: { Authorization: `Bearer ${sessionToken}` } }),
+                      fetchJson("/api/teacher/workspace", { headers: { Authorization: `Bearer ${sessionToken}` } }),
+                    ]);
+                    setTeacherOverview({ ...overview, ...workspace });
                   } catch (err) {
                     setStatusMessage(err.message);
                   }
@@ -437,10 +439,10 @@ export default function UserApp() {
                 logout={logout}
                 unreadNotifs={unreadNotifs}
                 openChat={openChat}
-              />) : <PreviewDashboard goTo={goTo} />
+              />) : <PreviewDashboard goTo={goTo} onStartStudent={() => { setRegistrationTarget({ type: "student", packageKey: "" }); goTo("register"); }} />
             )}
             {route === "register" && (
-              <RegisterPage
+              registrationTarget.type === "student" ? <StudentRegisterPage onSubmit={handleCodeRequest} statusMessage={statusMessage} /> : <RegisterPage
                 registrationTarget={registrationTarget}
                 onSubmit={handleCodeRequest}
                 statusMessage={statusMessage}
@@ -495,10 +497,11 @@ export default function UserApp() {
                         body: JSON.stringify({ assessmentStatus, performanceLevel }),
                       });
                     }
-                    const refreshed = await fetchJson("/api/teacher/overview", {
-                      headers: { Authorization: `Bearer ${sessionToken}` },
-                    });
-                    setTeacherOverview(refreshed);
+                    const [overview, workspace] = await Promise.all([
+                      fetchJson("/api/teacher/overview", { headers: { Authorization: `Bearer ${sessionToken}` } }),
+                      fetchJson("/api/teacher/workspace", { headers: { Authorization: `Bearer ${sessionToken}` } }),
+                    ]);
+                    setTeacherOverview({ ...overview, ...workspace });
                   } catch (err) {
                     setStatusMessage(err.message);
                   }
@@ -1171,6 +1174,15 @@ function LoginPage({ onSubmit, statusMessage, onGoToRegister }) {
   </AuthShell>;
 }
 
+function StudentRegisterPage({ onSubmit, statusMessage }) {
+  const [form, setForm] = useState({ email: "", whatsapp: "", courseInterests: [] });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const courses = ["Cybersecurity", "Python", "Web Design/Website", "Computer Packages"];
+  const submit = async (event) => { event.preventDefault(); setBusy(true); setError(""); try { await onSubmit({ ...form, fullName: form.email.split("@")[0], registrationType: "student", registrationRole: "student" }); } catch (err) { setError(err.message); } finally { setBusy(false); } };
+  return <AuthShell isRegister onLogin={() => { window.location.hash = "login"; }}><form className="space-y-4" onSubmit={submit}><h1>Student Account</h1><p className="qoohi-role-label">Learn with QOOHI</p><Input label="Email address" type="email" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} /><Input label="WhatsApp number" type="tel" value={form.whatsapp} onChange={(value) => setForm((current) => ({ ...current, whatsapp: value }))} /><fieldset className="rounded-2xl border border-slate-200 p-3 text-left"><legend className="px-2 text-xs font-black uppercase tracking-widest text-slate-500">Course interest</legend><div className="grid gap-2 sm:grid-cols-2">{courses.map((course) => <label key={course} className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={form.courseInterests.includes(course)} onChange={(event) => setForm((current) => ({ ...current, courseInterests: event.target.checked ? [...current.courseInterests, course] : current.courseInterests.filter((item) => item !== course) }))} />{course}</label>)}</div></fieldset>{(error || statusMessage) && <Notice tone={error ? "error" : "info"}>{error || statusMessage}</Notice>}<ActionButton type="submit" disabled={busy || !form.courseInterests.length} className="w-full">{busy ? "Sending code..." : "Create student account"}</ActionButton><SocialButtons mode="register" role="student" /></form></AuthShell>;
+}
+
 function RegisterPage({ registrationTarget, onSubmit, statusMessage }) {
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", whatsapp: "", specialization: "", childName: "", childGradeLevel: "", childGoals: "", selectedPackage: registrationTarget.packageKey || "coding_ai_training" }); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [selectedRole, setSelectedRole] = useState(registrationTarget.type === "teacher" ? "teacher" : "parent"); const type = selectedRole; const label = type === "teacher" ? "Coach" : "Parent"; const set = (key) => (value) => setForm((current) => ({ ...current, [key]: value }));
   const submit = async (event) => { event.preventDefault(); setBusy(true); setError(""); try { await onSubmit({ ...form, fullName: `${form.firstName} ${form.lastName}`.trim(), registrationType: registrationTarget.type === "course" ? "course" : type, registrationRole: type }); } catch (err) { setError(err.message); } finally { setBusy(false); } };
@@ -1182,7 +1194,7 @@ function VerifyPage({ pendingVerification, onVerify, statusMessage }) {
   return <AuthShell><form className="space-y-5" onSubmit={submit}><h1>Verify Email</h1><label className="block"><span className="mb-2 block text-sm font-bold text-slate-200">Six-digit code</span><input autoFocus required inputMode="numeric" maxLength="6" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} className="w-full rounded-[1.25rem] border border-cyan-300/30 bg-slate-950/60 px-5 py-5 text-center text-3xl font-black tracking-[.45em] text-white outline-none focus:border-cyan-300" placeholder="000000" /></label>{(error || statusMessage) && <Notice tone={error ? "error" : "info"}>{error || statusMessage}</Notice>}<ActionButton disabled={busy || code.length < 4} type="submit" className="w-full">{busy ? "Verifying..." : "Verify email"}</ActionButton></form></AuthShell>;
 }
 
-function PreviewDashboard({ goTo }) {
+function PreviewDashboard({ goTo, onStartStudent }) {
   const [role, setRole] = useState("parent");
   const [aiStartedAt, setAiStartedAt] = useState(null);
   const [secondsLeft, setSecondsLeft] = useState(180);
@@ -1208,6 +1220,7 @@ function PreviewDashboard({ goTo }) {
       <div className="preview-avatar" style={{ background: current.accent }}>{current.name[0]}</div>
     </div>
     <div className="mt-5 flex gap-2 rounded-2xl bg-white p-2 shadow-sm" role="tablist">{Object.entries(roles).map(([key, item]) => <button key={key} type="button" onClick={() => setRole(key)} className={`flex-1 rounded-xl px-3 py-3 text-sm font-black capitalize transition ${role === key ? "text-white shadow" : "text-slate-500 hover:bg-violet-50"}`} style={role === key ? { background: item.accent } : undefined}>{key}</button>)}</div>
+    <div className="mt-4 flex justify-end"><button type="button" onClick={role === "student" ? onStartStudent : () => goTo("register")} className="rounded-full bg-violet-600 px-5 py-2.5 text-sm font-black text-white">Register as {role}</button></div>
     <div className="mt-5 grid gap-5 lg:grid-cols-[1.5fr_1fr]">
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="preview-card relative rounded-[1.5rem] bg-white p-6 shadow-sm"><span className="preview-tap-hint">☝</span><p className="text-sm font-bold text-slate-500">Welcome back</p><h2 className="mt-2 text-2xl font-black text-slate-900">{current.name}</h2><p className="mt-1 text-sm text-slate-500">{current.note}</p><div className="mt-6 flex items-end justify-between"><strong className="text-3xl font-black" style={{ color: current.accent }}>{current.stat}</strong><span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-700">On track</span></div></div>
@@ -1256,6 +1269,7 @@ function DashboardPage({
     mpesaName: "",
     mpesaNumber: "",
   });
+  const [teacherUpdates, setTeacherUpdates] = useState([]);
 
   useEffect(() => {
     if (!dashboard?.student) return;
@@ -1265,6 +1279,13 @@ function DashboardPage({
       avatarUrl: dashboard.student.avatarUrl || "",
     });
   }, [dashboard]);
+
+  useEffect(() => {
+    if (dashboard?.student?.role !== "parent" || !sessionToken) { setTeacherUpdates([]); return; }
+    fetchJson("/api/parent/teacher-updates", { headers: { Authorization: `Bearer ${sessionToken}` } })
+      .then((data) => setTeacherUpdates(data.updates || []))
+      .catch(() => setTeacherUpdates([]));
+  }, [dashboard, sessionToken]);
 
   if (loading) {
     return (
@@ -1334,7 +1355,9 @@ function DashboardPage({
         .filter((v, i, a) => a.findIndex((t) => t.id === v.id) === i)
     : [];
 
-  const allStudents = [...parentChildren, ...enrolledStudents];
+  const workspaceStudents = teacherOverview?.students || [];
+  const allStudents = [...parentChildren, ...enrolledStudents, ...workspaceStudents, ...(teacherOverview?.institutionLearners || [])]
+    .filter((v, i, a) => a.findIndex((t) => String(t.id) === String(v.id)) === i);
 
   const serviceActions = {
     computer_packages: { route: "learn", label: "Open Courses" },
@@ -1362,7 +1385,7 @@ function DashboardPage({
     ...(isParent ? [{ id: "parent", Icon: FaUsers, label: "Support" }] : []),
     ...(isParent ? [{ id: "register-child", Icon: FaUserGraduate, label: "Register Your Child" }] : []),
     ...(isParent ? [{ id: "materials", Icon: FaBookOpen, label: "IEP BOOK" }] : []),
-    ...(isParent ? [{ id: "teacher", Icon: FaChalkboardTeacher, label: "MY TEACHER" }] : []),
+    ...((isParent || isStudent) ? [{ id: "teacher", Icon: FaChalkboardTeacher, label: "MY TEACHER" }] : []),
   ];
 
   const openProfile = (tab = "view") => {
@@ -1460,6 +1483,7 @@ function DashboardPage({
       subtitle="Profile, balance, services, and activity"
       compact
     >
+      <div className="mb-4 flex justify-end"><button type="button" aria-label="Notifications" onClick={() => unreadNotifs?.[0] && openChat?.(unreadNotifs[0].from_user_id, unreadNotifs[0].from_name)} className="relative rounded-full border border-violet-200 bg-white px-4 py-2 text-xl shadow-sm">🔔{unreadNotifs?.length > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white">{unreadNotifs.length}</span>}</button></div>
       {cropFile && <ImageCropModal file={cropFile} onCancel={() => setCropFile(null)} onConfirm={(avatarUrl) => { setProfileDraft((current) => ({ ...current, avatarUrl })); setCropFile(null); }} />}
       {unreadNotifs?.length > 0 && (
         <div className="mb-4 space-y-2">
@@ -2145,6 +2169,7 @@ function DashboardPage({
             <GlassPanel className="p-6 sm:p-8">
               <SectionLabel>Coach Tools</SectionLabel>
               <h3 className="mt-2 mb-6 text-2xl font-black text-white">Learner Roster</h3>
+              <TeacherWorkspaceControls authHeaders={authHeaders} workspace={teacherOverview || {}} onRefresh={onRefresh} openChat={openChat} />
               <div className="overflow-hidden rounded-2xl border border-white/5 bg-slate-950/50">
                 <table className="w-full text-left text-sm">
                   <thead>
@@ -2201,6 +2226,8 @@ function DashboardPage({
               <GlassPanel className="p-6 sm:p-8">
                 <SectionLabel>Parent Hub</SectionLabel>
                 <h3 className="mt-2 mb-6 text-2xl font-black text-white">Support your child's learning</h3>
+
+                {teacherUpdates.length > 0 && <div className="mb-6 rounded-2xl border border-violet-200 bg-violet-50 p-4"><p className="text-xs font-black uppercase tracking-widest text-violet-600">Teacher updates</p><div className="mt-3 grid gap-2">{teacherUpdates.slice(0, 6).map((update) => <div key={update.id} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-sm"><span><b className="text-slate-700">{update.child_name}</b><span className="ml-2 text-slate-500">{update.subject || "General"} · {update.record_type}</span></span><strong className="text-violet-700">{update.value}</strong></div>)}</div></div>}
 
                 {dashboard.children && dashboard.children.length > 0 ? (
                   <div className="grid gap-4">
@@ -2539,6 +2566,23 @@ function DashboardPage({
   );
 }
 
+function TeacherWorkspaceControls({ authHeaders, workspace = {}, onRefresh, openChat }) {
+  const [className, setClassName] = useState("");
+  const [record, setRecord] = useState({ studentUserId: "", subject: "", recordType: "grade", value: "", notes: "" });
+  const [assignment, setAssignment] = useState({ classId: "", title: "", file: null });
+  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const run = async (operation) => { setBusy(true); setStatus(""); setError(""); try { await operation(); await onRefresh?.(); setStatus("Saved successfully."); } catch (e) { setError(e.message); } finally { setBusy(false); } };
+  return <div className="mb-6 grid gap-4 lg:grid-cols-3">
+    <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4"><p className="text-xs font-black uppercase tracking-widest text-violet-600">New class</p><div className="mt-3 flex gap-2"><input value={className} onChange={(e) => setClassName(e.target.value)} placeholder="Class name" className="min-w-0 flex-1 rounded-xl border border-violet-200 bg-white px-3 py-2 text-sm" /><button type="button" disabled={busy || !className.trim()} onClick={() => run(async () => { await fetchJson("/api/teacher/classes", { method: "POST", headers: authHeaders, body: JSON.stringify({ name: className }) }); setClassName(""); })} className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-black text-white">Add</button></div></div>
+    <div className="rounded-2xl border border-pink-200 bg-pink-50 p-4"><p className="text-xs font-black uppercase tracking-widest text-pink-600">Grade / attendance</p><div className="mt-3 grid gap-2"><select value={record.studentUserId} onChange={(e) => setRecord((c) => ({ ...c, studentUserId: e.target.value }))} className="rounded-xl border border-pink-200 bg-white px-3 py-2 text-sm"><option value="">Choose learner</option>{(workspace.students || []).map((student) => <option key={`u-${student.id}`} value={student.id}>{student.full_name}</option>)}{(workspace.children || []).map((child) => <option key={`c-${child.id}`} value={`ps_${child.id}`}>{child.child_name} · parent link</option>)}</select><div className="flex gap-2"><input value={record.subject} onChange={(e) => setRecord((c) => ({ ...c, subject: e.target.value }))} placeholder="Subject" className="min-w-0 flex-1 rounded-xl border border-pink-200 bg-white px-3 py-2 text-sm" /><input value={record.value} onChange={(e) => setRecord((c) => ({ ...c, value: e.target.value }))} placeholder="Grade / Present" className="min-w-0 flex-1 rounded-xl border border-pink-200 bg-white px-3 py-2 text-sm" /></div><button type="button" disabled={busy || !record.studentUserId} onClick={() => run(async () => { const parentLinked = String(record.studentUserId).startsWith("ps_"); const payload = parentLinked ? { ...record, studentUserId: "", parentStudentId: String(record.studentUserId).replace("ps_", "") } : record; await fetchJson("/api/teacher/progress", { method: "POST", headers: authHeaders, body: JSON.stringify(payload) }); })} className="rounded-xl bg-pink-600 px-3 py-2 text-xs font-black text-white">Save record</button></div></div>
+    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><p className="text-xs font-black uppercase tracking-widest text-amber-700">PDF assignment</p><div className="mt-3 grid gap-2"><select value={assignment.classId} onChange={(e) => setAssignment((c) => ({ ...c, classId: e.target.value }))} className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm"><option value="">Choose class</option>{(workspace.classes || []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><input value={assignment.title} onChange={(e) => setAssignment((c) => ({ ...c, title: e.target.value }))} placeholder="Assignment title" className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm" /><input type="file" accept="application/pdf,.pdf" onChange={(e) => setAssignment((c) => ({ ...c, file: e.target.files?.[0] || null }))} className="text-xs" /><button type="button" disabled={busy || !assignment.classId || !assignment.file} onClick={() => run(async () => { const form = new FormData(); form.append("classId", assignment.classId); form.append("title", assignment.title); form.append("file", assignment.file); await fetchJson("/api/teacher/assignments", { method: "POST", headers: { Authorization: authHeaders.Authorization }, body: form }); })} className="rounded-xl bg-amber-500 px-3 py-2 text-xs font-black text-white">Upload PDF</button></div></div>
+    {(status || error) && <p className={`lg:col-span-3 rounded-xl px-3 py-2 text-sm font-bold ${error ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700"}`}>{error || status}</p>}
+    {(workspace.students || []).slice(0, 8).map((student) => <div key={`chat-${student.id}`} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"><span className="font-bold text-slate-700">{student.full_name}</span><button type="button" onClick={() => openChat?.(student.id, student.full_name)} className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-700">Message</button></div>)}
+  </div>;
+}
+
 function ParentRegisterChildSection({ authHeaders, onRefresh }) {
   const [childName, setChildName] = useState("");
   const [gradeLevel, setGradeLevel] = useState("");
@@ -2670,12 +2714,14 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile, openChat, t
   const [topicDrafts, setTopicDrafts] = useState({});
   const [uploadedBooks, setUploadedBooks] = useState([]);
   const [downloadingImg, setDownloadingImg] = useState(null);
+  const [marketTeachers, setMarketTeachers] = useState([]);
   const subjects = getSubjectsForGrade(grade);
 
   const gradeRef = useRef(grade);
   gradeRef.current = grade;
 
   useEffect(() => { loadAndGenerate(grade); }, []);
+  useEffect(() => { fetchJson("/api/marketplace/teachers").then((data) => setMarketTeachers(data.teachers || [])).catch(() => setMarketTeachers([])); }, []);
 
   const normalizeNoteText = (text) => {
     if (!text || typeof text !== "string") return "";
@@ -2831,7 +2877,7 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile, openChat, t
   };
 
   if (teacherOnly) {
-    return <GlassPanel className="p-6 sm:p-8"><SectionLabel>MY TEACHER</SectionLabel><h3 className="mt-2 text-2xl font-black text-white">Find a teacher</h3><p className="mt-2 text-sm text-slate-400">Choose a subject to find a QOOHI teacher who can support this learner.</p><div className="mt-6 grid gap-3 sm:grid-cols-2">{subjects.map((subject) => <div key={subject} className="rounded-2xl border border-white/10 bg-white/5 p-4"><p className="font-bold text-white">{subject}</p><button type="button" onClick={() => fetchTeacherSuggest(subject)} disabled={teacherResults[subject]?.loading} className="mt-3 w-full rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-black text-cyan-300">{teacherResults[subject]?.loading ? "Finding..." : "Find teacher"}</button>{teacherResults[subject]?.reason && <p className="mt-2 text-xs text-slate-400">{teacherResults[subject].reason}</p>}{teacherResults[subject]?.teacher && <button type="button" onClick={() => openChat?.(teacherResults[subject].teacher.id, teacherResults[subject].teacher.name)} className="mt-2 text-xs font-bold text-cyan-300">Open chat</button>}</div>)}</div></GlassPanel>;
+    return <GlassPanel className="p-6 sm:p-8"><SectionLabel>MY TEACHER</SectionLabel><h3 className="mt-2 text-2xl font-black text-white">Find a teacher</h3><p className="mt-2 text-sm text-slate-400">Browse teachers registered directly or through an institution.</p><div className="mt-6 grid gap-3 sm:grid-cols-2">{marketTeachers.map((teacher) => <article key={teacher.id} className="rounded-2xl border border-violet-200 bg-violet-50 p-4"><p className="font-black text-slate-800">{teacher.full_name}</p><p className="mt-1 text-xs text-slate-500">{teacher.specializations || "CBC learning support"}</p><p className="mt-1 text-xs text-slate-500">{teacher.home_location || "Kenya"}</p><p className="mt-2 text-sm font-black text-violet-700">From Ksh {Number(teacher.monthly || 0).toLocaleString()} / month</p><button type="button" onClick={() => openChat?.(teacher.id, teacher.full_name)} className="mt-3 rounded-full bg-violet-600 px-3 py-2 text-xs font-black text-white">Message teacher</button></article>)}</div><div className="mt-6 grid gap-3 sm:grid-cols-2">{subjects.map((subject) => <div key={subject} className="rounded-2xl border border-white/10 bg-white/5 p-4"><p className="font-bold text-white">{subject}</p><button type="button" onClick={() => fetchTeacherSuggest(subject)} disabled={teacherResults[subject]?.loading} className="mt-3 w-full rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-black text-cyan-300">{teacherResults[subject]?.loading ? "Finding..." : "Find teacher"}</button>{teacherResults[subject]?.reason && <p className="mt-2 text-xs text-slate-400">{teacherResults[subject].reason}</p>}{teacherResults[subject]?.teacher && <button type="button" onClick={() => openChat?.(teacherResults[subject].teacher.id, teacherResults[subject].teacher.name)} className="mt-2 text-xs font-bold text-cyan-300">Open chat</button>}</div>)}</div></GlassPanel>;
   }
 
   return (
@@ -3076,6 +3122,7 @@ function ParentMaterialsSection({ authHeaders, balance, openProfile, openChat, t
 
 function TeacherSpecializationsSection({ authHeaders, initialSpecs = "" }) {
   const [specs, setSpecs] = useState(initialSpecs);
+  const [prices, setPrices] = useState({ daily: "", weekly: "", monthly: "", sixMonth: "", yearly: "10000" });
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
 
@@ -3084,10 +3131,10 @@ function TeacherSpecializationsSection({ authHeaders, initialSpecs = "" }) {
     setSaving(true);
     setStatus("");
     try {
-      await fetchJson("/api/teacher/specializations", {
+      await fetchJson("/api/teacher/pricing", {
         method: "POST",
         headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ specializations: specs }),
+        body: JSON.stringify({ specializations: specs, ...prices }),
       });
       setStatus("Specializations saved successfully.");
     } catch (err) {
@@ -3114,6 +3161,7 @@ function TeacherSpecializationsSection({ authHeaders, initialSpecs = "" }) {
             required
           />
         </div>
+        <div className="grid gap-3 sm:grid-cols-2"><p className="sm:col-span-2 text-xs font-black uppercase tracking-widest text-slate-400">Your service prices</p>{[["daily", "Daily (24 hours)"], ["weekly", "Weekly"], ["monthly", "Monthly"], ["sixMonth", "6 months"], ["yearly", "12 months / yearly"]].map(([key, label]) => <label key={key} className="text-xs font-bold text-slate-400">{label}<input type="number" min="0" value={prices[key]} onChange={(e) => setPrices((current) => ({ ...current, [key]: e.target.value }))} className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 text-white" placeholder="Ksh" /></label>)}</div>
         {status && <p className={`text-sm ${status.includes("success") ? "text-emerald-400" : "text-rose-400"}`}>{status}</p>}
         <ActionButton type="submit" disabled={saving} className="!px-6 !py-3 !text-sm">
           {saving ? "Saving..." : "Save Specializations"}
@@ -3294,10 +3342,11 @@ function getRouteFromHash() {
 }
 
 async function fetchJson(path, options = {}) {
+  const multipart = typeof FormData !== "undefined" && options.body instanceof FormData;
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...(multipart ? {} : { "Content-Type": "application/json" }),
       ...(options.headers || {}),
     },
   });
