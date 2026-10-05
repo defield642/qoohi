@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS school_students (
  current_teacher TEXT, underperforming_subjects_json TEXT NOT NULL DEFAULT '[]', created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
  UNIQUE(institution_id,registration_no)
 );
+ALTER TABLE school_students ADD COLUMN IF NOT EXISTS subjects_json TEXT NOT NULL DEFAULT '[]';
 CREATE TABLE IF NOT EXISTS teacher_profiles (
  user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, location_label TEXT NOT NULL DEFAULT '',
  latitude DOUBLE PRECISION, longitude DOUBLE PRECISION, subjects_json TEXT NOT NULL DEFAULT '[]', available BOOLEAN NOT NULL DEFAULT true
@@ -84,8 +85,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(30);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS balance NUMERIC(12,2) NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS specializations TEXT NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS grade_level VARCHAR(40) NOT NULL DEFAULT '';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code) WHERE referral_code IS NOT NULL;
-CREATE TABLE IF NOT EXISTS parent_students (id BIGSERIAL PRIMARY KEY,parent_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,child_name VARCHAR(200) NOT NULL,grade_level VARCHAR(80) NOT NULL,goals TEXT NOT NULL DEFAULT '',assessment_status VARCHAR(40) NOT NULL DEFAULT 'waiting',performance_level VARCHAR(40) NOT NULL DEFAULT '0',created_at TIMESTAMPTZ NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS parent_students (id BIGSERIAL PRIMARY KEY,parent_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,child_name VARCHAR(200) NOT NULL,grade_level VARCHAR(80) NOT NULL,goals TEXT NOT NULL DEFAULT '',assessment_status VARCHAR(40) NOT NULL DEFAULT 'waiting',performance_level VARCHAR(40) NOT NULL DEFAULT '0',created_at TIMESTAMPTZ NOT NULL DEFAULT now(),subjects_json TEXT NOT NULL DEFAULT '[]');
+ALTER TABLE parent_students ADD COLUMN IF NOT EXISTS subjects_json TEXT NOT NULL DEFAULT '[]';
 CREATE TABLE IF NOT EXISTS enrollments (id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,package_key VARCHAR(80) NOT NULL,package_name VARCHAR(200) NOT NULL,price_ksh INT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(user_id,package_key));
 CREATE TABLE IF NOT EXISTS deposits (id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id),amount NUMERIC(12,2) NOT NULL,mpesa_ref VARCHAR(100),phone VARCHAR(40),mpesa_message TEXT,proof_image_url TEXT,status VARCHAR(30) NOT NULL DEFAULT 'pending',admin_note TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),verified_at TIMESTAMPTZ);
 CREATE TABLE IF NOT EXISTS withdrawals (id BIGSERIAL PRIMARY KEY,user_id BIGINT NOT NULL REFERENCES users(id),amount NUMERIC(12,2) NOT NULL,mpesa_name TEXT NOT NULL,mpesa_number VARCHAR(40) NOT NULL,status VARCHAR(30) NOT NULL DEFAULT 'pending',admin_note TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),processed_at TIMESTAMPTZ);
@@ -137,6 +140,12 @@ CREATE TABLE IF NOT EXISTS teacher_prices (
  six_month NUMERIC(12,2) NOT NULL DEFAULT 0,
  yearly NUMERIC(12,2) NOT NULL DEFAULT 0,
  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS public_ai_usage (
+ client_key CHAR(64) NOT NULL,
+ window_start TIMESTAMPTZ NOT NULL,
+ request_count INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY(client_key, window_start)
 );
 CREATE TABLE IF NOT EXISTS teacher_transactions (
  id BIGSERIAL PRIMARY KEY,

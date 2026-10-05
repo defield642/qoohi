@@ -14,5 +14,8 @@ export default defineConfig({
     },
   }],
   server: { host: "0.0.0.0", port: 5001, allowedHosts: true },
-  build: { rollupOptions: { input: { institution: new URL("./institution.html", import.meta.url).pathname } } },
+  build: {
+    emptyOutDir: false,
+    rollupOptions: { input: { institution: new URL("./institution.html", import.meta.url).pathname } },
+  },
 });

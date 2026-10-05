@@ -32,8 +32,16 @@ npm run dev
 - parent@qoohi.com
 
 ## Key pages
-- `/` — main app
-- `/admin` — admin panel
+- `/` — public guest dashboard preview; switch between parent, teacher, and student views before registering
+- `/admin` and `/admin/` — admin panel
+- `/institution/` — institution portal
 - `/caleb` — special page
+
+The signed-out user and institution previews read public aggregate totals from `/api/public/preview-stats`. Guest users can browse books actually available for a selected grade and safely preview supported PDF, image, and text files from the uploaded book archives. The user preview also offers a short AI tutor session; anonymous AI requests are server rate-limited and prompt length is capped. Teacher discovery cards omit private contact information, while the authenticated teacher learner directory exposes only learner display name, source, grade, and opted-in course interests.
+
+## Frontend modules
+- `src/UserPortal.jsx` is the main user application entry and uses the role modules in `src/student.jsx`, `src/parent.jsx`, `src/teacher.jsx`, and their registration modules.
+- `src/InstitutionPortal.jsx` is the institution application entry and uses `src/institution.jsx` and `src/institutionregister.jsx`.
+- `src/UserApp.jsx` and `src/InstitutionApp.jsx` are compatibility re-exports only; the app entries no longer depend on them, so they can be removed when older imports are no longer needed.
 
 ## User preferences

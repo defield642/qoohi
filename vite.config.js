@@ -10,6 +10,8 @@ export default defineConfig({
       server.middlewares.use((req, res, next) => {
         if (req.url === '/admin') {
           req.url = '/admin.html';
+        } else if (req.url === '/institution' || req.url === '/institution/') {
+          req.url = '/institution/index.html';
         }
         next();
       });
@@ -29,6 +31,8 @@ export default defineConfig({
       input: {
         main: new URL('./index.html', import.meta.url).pathname,
         admin: new URL('./admin.html', import.meta.url).pathname,
+        adminRoute: new URL('./admin/index.html', import.meta.url).pathname,
+        institutionRoute: new URL('./institution/index.html', import.meta.url).pathname,
       },
     },
   },

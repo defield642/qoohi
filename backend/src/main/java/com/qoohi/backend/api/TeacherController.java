@@ -82,7 +82,31 @@ public class TeacherController {
 
   @GetMapping("/marketplace/teachers")
   public Map<String,Object> marketplaceTeachers() {
-    return Map.of("teachers", db.queryForList("SELECT u.id,u.full_name,u.whatsapp,u.home_location,u.specializations,p.daily,p.weekly,p.monthly,p.six_month,p.yearly FROM users u LEFT JOIN teacher_prices p ON p.teacher_id=u.id WHERE u.role='teacher' ORDER BY u.full_name"), "platformTiers", Map.of("daily", 400, "weekly", 1000, "monthly", 2500, "sixMonth", 6500, "yearly", 10000));
+    return Map.of("teachers", db.queryForList(
+      "SELECT u.id,u.full_name," +
+      "COALESCE(NULLIF(u.specializations,''),NULLIF(tp.subjects_json,''),'[]') AS specializations," +
+      "COALESCE(NULLIF(tp.location_label,''),'') AS home_location," +
+      "string_agg(DISTINCT i.name, ', ' ORDER BY i.name) AS institution_names," +
+      "p.daily,p.weekly,p.monthly,p.six_month,p.yearly " +
+      "FROM users u LEFT JOIN teacher_prices p ON p.teacher_id=u.id " +
+      "LEFT JOIN teacher_profiles tp ON tp.user_id=u.id " +
+      "LEFT JOIN institution_staff ist ON ist.user_id=u.id " +
+      "LEFT JOIN institutions i ON i.id=ist.institution_id " +
+      "WHERE u.role='teacher' GROUP BY u.id,tp.subjects_json,tp.location_label,p.daily,p.weekly,p.monthly,p.six_month,p.yearly " +
+      "ORDER BY u.full_name"
+    ), "platformTiers", Map.of("daily", 400, "weekly", 1000, "monthly", 2500, "sixMonth", 6500, "yearly", 10000));
+  }
+
+  @GetMapping("/teacher/learners")
+  public Map<String,Object> learners(@RequestHeader("Authorization") String header) {
+    teacher(header);
+    return Map.of("learners", db.queryForList(
+      "SELECT row_number() OVER (ORDER BY display_name,source_type,grade_level) AS learner_key,display_name,source_type,grade_level,interests_json FROM (" +
+      "SELECT u.full_name AS display_name,'student' AS source_type,u.grade_level,u.subjects_json AS interests_json FROM users u WHERE u.role='student' " +
+      "UNION ALL SELECT p.child_name,'parent',p.grade_level,p.subjects_json FROM parent_students p " +
+      "UNION ALL SELECT s.full_name,'institution',s.grade_key,s.subjects_json FROM school_students s" +
+      ") directory ORDER BY display_name"
+    ));
   }
 
   private Map<String,Object> teacher(String header) { Map<String,Object> user = auth.user(header); if (user == null || !"teacher".equals(user.get("role"))) throw new IllegalArgumentException("Teacher login required."); return user; }
