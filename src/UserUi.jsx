@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { FaStop, FaVolumeUp } from "react-icons/fa";
 
-export function PageStack({ title, subtitle, children, compact = false }) {
+export function PageStack({ title, subtitle, children, compact = false, showPlatformLabel = true }) {
   return (
     <div className="space-y-12">
       <div className={`relative flex flex-col ${compact ? "gap-4 lg:flex-row lg:items-center" : "gap-6 lg:flex-row lg:items-end"} lg:justify-between`}>
         <div className={`max-w-3xl ${compact ? "space-y-2" : "space-y-4"}`}>
-          <SectionLabel>QOOHI PLATFORM</SectionLabel>
+          {showPlatformLabel && <SectionLabel>QOOHI PLATFORM</SectionLabel>}
           <h1 className={`font-black text-white ${compact ? "text-4xl leading-tight tracking-tight sm:text-5xl lg:text-6xl" : "text-6xl leading-[0.9] tracking-tighter uppercase sm:text-8xl"}`}>
             {title}
           </h1>
@@ -17,6 +18,120 @@ export function PageStack({ title, subtitle, children, compact = false }) {
         </div>
       </div>
       {children}
+    </div>
+  );
+}
+
+function speechChunks(text, maxLength = 1400) {
+  const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
+  const chunks = [];
+  let chunk = "";
+  for (const sentence of sentences) {
+    const words = sentence.trim().split(/\s+/);
+    for (const word of words) {
+      const next = chunk ? `${chunk} ${word}` : word;
+      if (next.length > maxLength && chunk) {
+        chunks.push(chunk);
+        chunk = word;
+      } else {
+        chunk = next;
+      }
+    }
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
+}
+
+export function SpeakTextButton({ text, lang = "en-KE", className = "" }) {
+  const [status, setStatus] = useState("");
+  const speechActive = useRef(false);
+
+  useEffect(() => () => {
+    const wasSpeaking = speechActive.current;
+    speechActive.current = false;
+    if (wasSpeaking && "speechSynthesis" in window) window.speechSynthesis.cancel();
+  }, []);
+
+  const stopSpeech = () => {
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    speechActive.current = false;
+    setStatus("");
+  };
+
+  const listen = () => {
+    if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
+      setStatus("Audio reading is not supported by this browser.");
+      return;
+    }
+    const synthesis = window.speechSynthesis;
+    if (synthesis.speaking && speechActive.current) {
+      if (synthesis.paused) {
+        synthesis.resume();
+        setStatus("Speaking");
+      } else {
+        synthesis.pause();
+        setStatus("Paused");
+      }
+      return;
+    }
+
+    synthesis.cancel();
+    const chunks = speechChunks(String(text || "").trim());
+    if (!chunks.length) return;
+    const voices = synthesis.getVoices();
+    const requestedLanguage = /kiswahili|swahili/i.test(text) ? "sw-KE" : lang;
+    const voice = voices.find((item) => item.lang.toLowerCase() === requestedLanguage.toLowerCase())
+      || voices.find((item) => item.lang.toLowerCase().startsWith(requestedLanguage.slice(0, 2).toLowerCase()));
+    speechActive.current = true;
+    setStatus("Speaking");
+
+    const speakChunk = (index) => {
+      if (!speechActive.current) return;
+      if (index >= chunks.length) {
+        speechActive.current = false;
+        setStatus("");
+        return;
+      }
+      const utterance = new SpeechSynthesisUtterance(chunks[index]);
+      utterance.lang = requestedLanguage;
+      utterance.rate = 0.9;
+      utterance.pitch = 1.05;
+      if (voice) utterance.voice = voice;
+      utterance.onend = () => speakChunk(index + 1);
+      utterance.onerror = () => {
+        if (!speechActive.current) return;
+        speechActive.current = false;
+        setStatus("Audio reading could not continue.");
+      };
+      synthesis.speak(utterance);
+    };
+    speakChunk(0);
+  };
+
+  return (
+    <div className={`inline-flex flex-wrap items-center gap-2 ${className}`}>
+      <button
+        type="button"
+        onClick={listen}
+        disabled={!String(text || "").trim()}
+        aria-label={status === "Paused" ? "Resume AI explanation" : status === "Speaking" ? "Pause AI explanation" : "Listen to AI explanation"}
+        className="inline-flex min-h-10 items-center gap-2 rounded-full border border-violet-300 bg-white px-4 py-2 text-sm font-bold text-violet-900 shadow-sm transition hover:bg-violet-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <FaVolumeUp aria-hidden="true" />
+        {status === "Paused" ? "Resume" : status === "Speaking" ? "Pause" : "Listen"}
+      </button>
+      {speechActive.current && (
+        <button
+          type="button"
+          onClick={stopSpeech}
+          aria-label="Stop AI explanation"
+          className="inline-flex min-h-10 items-center gap-2 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-700"
+        >
+          <FaStop aria-hidden="true" />
+          Stop
+        </button>
+      )}
+      {status && status !== "Speaking" && status !== "Paused" && <span role="status" className="text-sm font-semibold text-rose-800">{status}</span>}
     </div>
   );
 }

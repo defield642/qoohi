@@ -1,3 +1,5 @@
+const QOOHI_LOGO = `${import.meta.env.BASE_URL}qoohi-icon.svg`;
+
 export default function InstitutionRegister({
   mode,
   setMode,
@@ -18,6 +20,7 @@ export default function InstitutionRegister({
 }) {
   return <main className={`institution-auth ${mode === "register" ? "active" : ""}`}>
     <section className="institution-form-panel">
+      <img src={QOOHI_LOGO} alt="QOOHI" className="mb-5 h-12 w-12 rounded-xl" />
       {mode === "register" && <>
         <h1>Create Account</h1><p className="institution-kicker">Register your institution</p>
         <form onSubmit={submitAuth}>

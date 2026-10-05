@@ -27,7 +27,6 @@ import {
   FaWallet,
   FaWhatsapp,
 } from "react-icons/fa";
-import QoohiLogo from "./assets/qoohiLogo.jpeg";
 import GuestDashboard, { StudentDashboard } from "./student.jsx";
 import StudentRegister from "./studentregister.jsx";
 import TeacherRegister from "./teacherregister.jsx";
@@ -44,7 +43,9 @@ import {
   PageStack,
   SectionLabel,
   SecondaryButton,
+  SpeakTextButton,
 } from "./UserUi.jsx";
+const QoohiLogo = "/qoohi-icon.svg";
 const bg1 = QoohiLogo;
 const bg2 = QoohiLogo;
 const bg3 = QoohiLogo;
@@ -582,9 +583,7 @@ function Header({ route, goTo, dashboard }) {
             onClick={() => goTo("home")}
             className="group flex flex-shrink-0 items-center gap-3 transition-transform active:scale-95"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-lg font-black text-purple-600 shadow-sm sm:h-12 sm:w-12">
-              Q
-            </div>
+            <img src="/qoohi-icon.svg" alt="" className="h-10 w-10 rounded-xl shadow-sm sm:h-12 sm:w-12" />
             <div className="text-left">
               <h1 className="text-xl font-black leading-none tracking-tight text-white">QOOHI</h1>
               <p className="mt-0.5 hidden text-[9px] font-black uppercase tracking-[0.3em] text-purple-100 sm:block">Digital Future</p>
@@ -593,11 +592,11 @@ function Header({ route, goTo, dashboard }) {
 
           <div className="flex-1" />
 
-          <nav className="flex items-center gap-2">
+          <nav className="flex items-center gap-1 sm:gap-2">
             <button
               type="button"
               onClick={() => goTo("home")}
-              className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
+              className={`rounded-full px-2 py-2 text-[10px] font-black uppercase tracking-widest transition sm:px-4 sm:text-xs ${
                 route === "home"
                   ? "bg-white text-purple-700 shadow-sm"
                   : "text-purple-100 hover:bg-purple-500/50"
@@ -605,10 +604,11 @@ function Header({ route, goTo, dashboard }) {
             >
               Home
             </button>
+            <a href="/institution/" className="rounded-full px-2 py-2 text-[10px] font-black uppercase tracking-widest text-purple-100 transition hover:bg-purple-500/50 sm:px-4 sm:text-xs">Institution</a>
             <button
               type="button"
               onClick={() => goTo(dashboard ? "dashboard" : "login")}
-              className={`rounded-full px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
+              className={`rounded-full px-2 py-2 text-[10px] font-black uppercase tracking-widest transition sm:px-4 sm:text-xs ${
                 route === "dashboard" || route === "login"
                   ? "bg-white text-purple-700 shadow-sm"
                   : "text-purple-100 hover:bg-purple-500/50"
@@ -1348,11 +1348,13 @@ function DashboardPage({
     { id: "activity", Icon: FaHistory, label: "Activity" },
     ...(hasCourses ? [{ id: "courses", Icon: FaBookOpen, label: "Courses" }] : []),
     ...(isStudent && assessmentStatus === "completed" ? [{ id: "roadmap", Icon: FaGraduationCap, label: "Roadmap" }] : []),
+    ...(isTeacher ? [{ id: "classes", Icon: FaBookOpen, label: "Classes" }] : []),
     ...(isTeacher ? [{ id: "roster", Icon: FaChalkboardTeacher, label: "Roster" }] : []),
     ...(isTeacher ? [{ id: "teach-a-child", Icon: FaUserGraduate, label: "Teach a child" }] : []),
     ...(isTeacher ? [{ id: "specializations", Icon: FaLayerGroup, label: "Specializations" }] : []),
     ...(isParent ? [{ id: "parent", Icon: FaUsers, label: "Support" }] : []),
     ...(isParent ? [{ id: "register-child", Icon: FaUserGraduate, label: "Register Your Child" }] : []),
+    ...((isParent || isStudent) ? [{ id: "classes", Icon: FaBookOpen, label: "Classes" }] : []),
     ...(isParent ? [{ id: "materials", Icon: FaBookOpen, label: "IEP BOOK" }] : []),
     ...((isParent || isStudent) ? [{ id: "teacher", Icon: FaChalkboardTeacher, label: "MY TEACHER" }] : []),
   ];
@@ -1448,9 +1450,10 @@ function DashboardPage({
 
   return (
     <PageStack
-      title="Dashboard"
-      subtitle="Profile, balance, services, and activity"
+      title={fullName ? `${fullName}'s Dashboard` : `${roleLabel} Dashboard`}
+      subtitle={`${roleLabel} workspace`}
       compact
+      showPlatformLabel={false}
     >
       <div className="mb-4 flex justify-end"><button type="button" aria-label="Notifications" onClick={() => unreadNotifs?.[0] && openChat?.(unreadNotifs[0].from_user_id, unreadNotifs[0].from_name)} className="relative rounded-full border border-violet-200 bg-white px-4 py-2 text-xl shadow-sm">🔔{unreadNotifs?.length > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-black text-white">{unreadNotifs.length}</span>}</button></div>
       {cropFile && <ImageCropModal file={cropFile} onCancel={() => setCropFile(null)} onConfirm={(avatarUrl) => { setProfileDraft((current) => ({ ...current, avatarUrl })); setCropFile(null); }} />}
@@ -1986,6 +1989,18 @@ function DashboardPage({
             openChat={openChat}
             fetchJson={fetchJson}
           />}
+          {activeSection === "classes" && isTeacher && <TeacherDashboard
+            view="classes"
+            authHeaders={authHeaders}
+            workspace={teacherOverview || {}}
+            onRefresh={onRefresh}
+            fetchJson={fetchJson}
+          />}
+          {activeSection === "classes" && (isParent || isStudent) && <ParentDashboard
+            view="classes"
+            authHeaders={authHeaders}
+            fetchJson={fetchJson}
+          />}
           {activeSection === "teach-a-child" && <TeacherDashboard
             view="discover-learners"
             authHeaders={authHeaders}
@@ -2366,7 +2381,7 @@ function Footer({ goTo, openParentRegistration }) {
       <div className="mx-auto flex max-w-7xl flex-col items-center gap-3 px-4 text-center sm:flex-row sm:justify-between sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           <button type="button" onClick={() => goTo("home")} className="group flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500 text-sm font-black text-white transition-transform group-hover:scale-110">Q</span>
+            <img src="/qoohi-icon.svg" alt="" className="h-8 w-8 rounded-lg transition-transform group-hover:scale-110" />
             <span className="text-sm font-black tracking-widest text-white">QOOHI</span>
           </button>
         </div>
@@ -2682,6 +2697,7 @@ function QoohiAIPage({ sessionToken }) {
                     <div className="whitespace-pre-wrap leading-relaxed">
                       {msg.content}
                     </div>
+                    <SpeakTextButton text={msg.content} className="mt-3" />
 
                     <div className="absolute top-0 flex items-center gap-1 opacity-0 transition-all group-hover:opacity-100 py-1.5 px-3 bg-slate-950/90 border border-white/10 backdrop-blur-md rounded-2xl shadow-2xl z-20 -top-10 left-0">
                       <button

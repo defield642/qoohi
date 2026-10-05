@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import RegistrationGrowthChart from "./RegistrationGrowthChart.jsx";
 
 const API_BASE = (import.meta.env.VITE_API_BASE || "http://localhost:8080").replace(/\/$/, "");
+const QOOHI_LOGO = `${import.meta.env.BASE_URL}qoohi-icon.svg`;
 const SUBJECTS = ["Mathematics", "English", "Kiswahili", "Integrated Science", "Social Studies", "Agriculture", "Creative Arts", "Pre-Technical Studies", "Religious Education", "Business Studies"];
 
 async function request(path, { method = "GET", body, token } = {}) {
@@ -41,7 +42,7 @@ export function InstitutionPreview({ onOpenAuth }) {
     };
   }, []);
   return <main className="institution-preview-shell">
-    <header className="institution-preview-top"><div className="institution-preview-brand-mark">Q</div><div className="institution-preview-brand-copy"><strong>QOOHI</strong><p className="institution-dashboard-eyebrow">QOOHI for institutions</p><h1>One calm workspace for every learner.</h1></div><nav className="institution-preview-actions"><button type="button" onClick={() => onOpenAuth("login")}>Login</button><button type="button" onClick={() => onOpenAuth("register")}>Register</button></nav></header>
+    <header className="institution-preview-top"><a href="/" aria-label="QOOHI home"><img className="institution-preview-brand-mark" src={QOOHI_LOGO} alt="QOOHI" /></a><div className="institution-preview-brand-copy"><strong>QOOHI</strong><p className="institution-dashboard-eyebrow">QOOHI for institutions</p><h1>One calm workspace for every learner.</h1></div><nav className="institution-preview-actions"><button type="button" onClick={() => onOpenAuth("login")}>Login</button><button type="button" onClick={() => onOpenAuth("register")}>Register</button></nav></header>
     <section className="institution-preview-hero"><div><p className="institution-dashboard-eyebrow">Institution workspace preview</p><h2>Connect classes, teachers, and families.</h2><p>Preview learner rosters, CBC classes, teaching teams, recommendations, and school settings before opening your institution account.</p><button type="button" onClick={() => onOpenAuth("register")}>Create institution workspace</button></div><div className="institution-preview-orb">🏫</div></section>
     <section className="institution-preview-growth" aria-labelledby="institution-growth-title">
       <div className="institution-preview-growth-heading"><div><p className="institution-dashboard-eyebrow">QOOHI community</p><h2 id="institution-growth-title">Registration activity</h2><p>Monthly app and institution registrations for the latest six months.</p></div><span>Refreshes every 30 seconds</span></div>
@@ -61,6 +62,8 @@ export function InstitutionPreview({ onOpenAuth }) {
 export default function InstitutionDashboard({ data, token, refresh, onSignOut }) {
   const institution = data.institution;
   const [activeTab, setActiveTab] = useState("Overview");
+  const [selectedClassId, setSelectedClassId] = useState(null);
+  const [selectedTeacherId, setSelectedTeacherId] = useState(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -75,6 +78,16 @@ export default function InstitutionDashboard({ data, token, refresh, onSignOut }
     ? ["Grade 10", "Grade 11", "Grade 12"]
     : Array.from({ length: 9 }, (_, index) => `Grade ${index + 1}`);
   const counts = { learners: data.students?.length || 0, classes: data.classes?.length || 0, teachers: data.staff?.length || 0 };
+  const selectedClass = data.classes?.find((item) => String(item.id) === String(selectedClassId));
+  const selectedTeacher = data.staff?.find((item) => String(item.id) === String(selectedTeacherId));
+  const classStudents = useMemo(
+    () => selectedClass ? data.students?.filter((student) => student.grade_key === selectedClass.grade && student.class_name === selectedClass.name) || [] : [],
+    [data.students, selectedClass],
+  );
+  const teacherStudents = useMemo(
+    () => selectedTeacher ? data.students?.filter((student) => String(student.current_teacher || "").trim().toLocaleLowerCase() === String(selectedTeacher.full_name || "").trim().toLocaleLowerCase()) || [] : [],
+    [data.students, selectedTeacher],
+  );
 
   useEffect(() => {
     if (!placeTarget || placeQuery.trim().length < 3) { setSuggestions([]); return undefined; }
@@ -114,12 +127,28 @@ export default function InstitutionDashboard({ data, token, refresh, onSignOut }
   }} />{placeTarget === target && suggestions.length > 0 && <div className="institution-place-suggestions">{suggestions.map((place) => <button type="button" key={place.placeId} onClick={() => chooseLocation(place.placeId)}>{place.text}</button>)}</div>}</div>;
   const setStudentField = (key) => (event) => setStudentForm((current) => ({ ...current, [key]: event.target.value }));
   const setStaffField = (key) => (event) => setStaffForm((current) => ({ ...current, [key]: event.target.value }));
-  const subjects = (raw) => { try { return JSON.parse(raw || "[]"); } catch { return []; } };
+  const subjects = (raw) => {
+    try {
+      const parsed = JSON.parse(raw || "[]");
+      if (Array.isArray(parsed)) return parsed.map(String);
+    } catch {
+      return String(raw || "").split(/[,|]/).map((item) => item.trim()).filter(Boolean);
+    }
+    return [];
+  };
+  const openStudentRegistration = (classItem) => {
+    setStudentForm((current) => ({
+      ...current,
+      grade_key: classItem?.grade || "",
+      class_name: classItem?.name || "",
+    }));
+    setActiveTab("Learners");
+  };
 
   return <main className="institution-dashboard-shell">
     <aside className="institution-sidebar">
-      <div className="institution-brand"><div className="institution-brand-mark">Q</div><div><b>QOOHI</b><small>Institution Portal</small></div></div>
-      <nav className="institution-sidebar-nav">{["Overview", "Classes", "Coaches", "Settings"].map((item, index) => <button key={item} className={activeTab === item ? "active" : ""} type="button" onClick={() => { setActiveTab(item); setStatus(""); setError(""); }}><span>{["⌂", "▦", "♧", "⚙"][index]}</span>{item}</button>)}</nav>
+      <a href="/" className="institution-brand" aria-label="Return to QOOHI home"><img className="institution-brand-mark" src={QOOHI_LOGO} alt="" /><div><b>QOOHI</b><small>Institution Portal</small></div></a>
+      <nav className="institution-sidebar-nav">{["Overview", "Classes", "Learners", "Coaches", "Settings"].map((item, index) => <button key={item} className={activeTab === item ? "active" : ""} type="button" onClick={() => { setActiveTab(item); setStatus(""); setError(""); }}><span>{["⌂", "▦", "♙", "♧", "⚙"][index]}</span>{item}</button>)}</nav>
       <div className="institution-sidebar-account"><p>Signed in as</p><strong>{institution.email}</strong><button type="button" onClick={onSignOut}>Sign out</button></div>
     </aside>
     <section className="institution-dashboard-main">
@@ -131,10 +160,62 @@ export default function InstitutionDashboard({ data, token, refresh, onSignOut }
         {!institution.initialized && <button className="institution-btn institution-dashboard-btn" disabled={busy} onClick={() => run(async () => { await request("/schools/setup", { method: "POST", token }); }, "Workspace initialized.")}>Initialize school structure</button>}
         <section className="institution-content-grid"><article className="institution-content-card"><h3>Institution profile</h3><div className="institution-profile-row"><span>Email</span><b>{institution.email}</b></div><div className="institution-profile-row"><span>Phone</span><b>{institution.phone || "Not added"}</b></div><div className="institution-profile-row"><span>Motto</span><b>{institution.motto || "Not added"}</b></div><button className="institution-btn institution-dashboard-btn" onClick={() => setActiveTab("Settings")}>Edit profile</button></article><article className="institution-content-card"><h3>Quick actions</h3><div className="institution-quick-actions"><button type="button" onClick={() => setActiveTab("Classes")}>Add class</button><button type="button" onClick={() => setActiveTab("Coaches")}>Add teacher</button></div></article></section>
       </>}
-      {activeTab === "Classes" && <section className="institution-tab-panel"><p className="institution-dashboard-eyebrow">School structure</p><h2>Classes</h2><form className="institution-data-form" onSubmit={saveClass}><label>Grade<select value={classForm.grade} onChange={(event) => setClassForm((current) => ({ ...current, grade: event.target.value }))}>{gradeOptions.map((grade) => <option key={grade}>{grade}</option>)}</select></label><label>Class name<input required placeholder="e.g. Grade 1 Blue" value={classForm.name} onChange={(event) => setClassForm((current) => ({ ...current, name: event.target.value }))} /></label><button className="institution-btn" disabled={busy}>Add class</button></form><div className="institution-record-list">{data.classes?.map((item) => <div className="institution-record" key={item.id}><strong>{item.name}</strong><span>{item.grade}</span></div>)}{!counts.classes && <p>No classes added yet.</p>}</div></section>}
+      {activeTab === "Classes" && <section className="institution-tab-panel institution-catalog-page">
+        <p className="institution-dashboard-eyebrow">School structure</p>
+        <h2>Classes</h2>
+        <p className="institution-catalog-intro">Select a class to view its learner roster.</p>
+        <form className="institution-data-form" onSubmit={saveClass}>
+          <label>Grade<select value={classForm.grade} onChange={(event) => setClassForm((current) => ({ ...current, grade: event.target.value }))}>{gradeOptions.map((grade) => <option key={grade}>{grade}</option>)}</select></label>
+          <label>Class name<input required placeholder="e.g. Grade 1 Blue" value={classForm.name} onChange={(event) => setClassForm((current) => ({ ...current, name: event.target.value }))} /></label>
+          <button className="institution-btn" disabled={busy}>Add class</button>
+        </form>
+        {selectedClass && <section className="institution-selected-detail" aria-live="polite">
+          <div className="institution-detail-heading"><div><p className="institution-dashboard-eyebrow">{selectedClass.grade}</p><h3>{selectedClass.name}</h3><p>{classStudents.length} {classStudents.length === 1 ? "learner" : "learners"}</p></div><button type="button" onClick={() => setSelectedClassId(null)}>Close class details</button></div>
+          <div className="institution-detail-roster">
+            {classStudents.map((student) => <article className="institution-roster-card" key={student.id}><span className="institution-roster-avatar">{student.full_name?.trim()?.[0]?.toUpperCase() || "L"}</span><div><strong>{student.full_name}</strong><p>{student.registration_no || "No registration number"}</p><small>Parent/guardian: {student.parent_name || "Not provided"}</small></div></article>)}
+            {!classStudents.length && <p className="institution-empty-state">No learners are registered in this class yet.</p>}
+          </div>
+        </section>}
+        <div className="institution-netflix-grid">
+          {data.classes?.map((item, index) => {
+            const learnerCount = data.students?.filter((student) => student.grade_key === item.grade && student.class_name === item.name).length || 0;
+            return <button className={`institution-class-card institution-card-tone-${index % 4}`} type="button" key={item.id} aria-pressed={String(item.id) === String(selectedClassId)} onClick={() => setSelectedClassId(item.id)}>
+              <span className="institution-class-grade">{item.grade}</span><strong>{item.name}</strong><span>{learnerCount} {learnerCount === 1 ? "learner" : "learners"}</span><span className="institution-card-open">View learners <span aria-hidden="true">→</span></span>
+            </button>;
+          })}
+          {!counts.classes && <p className="institution-empty-state">No classes added yet. Add a class above to get started.</p>}
+        </div>
+        <div className="institution-floating-action"><button className="institution-btn" type="button" onClick={() => openStudentRegistration(selectedClass)}>Register new student</button></div>
+      </section>}
       {activeTab === "Learners" && <section className="institution-tab-panel"><p className="institution-dashboard-eyebrow">Roster management</p><h2>Register a learner</h2><form className="institution-data-form institution-form-grid" onSubmit={saveStudent}><input required placeholder="Student / pupil name" value={studentForm.full_name} onChange={setStudentField("full_name")} /><input required placeholder="Registration number" value={studentForm.registration_no} onChange={setStudentField("registration_no")} /><input required placeholder="Parent / guardian name" value={studentForm.parent_name} onChange={setStudentField("parent_name")} /><input required type="email" placeholder="Parent email" value={studentForm.parent_email} onChange={setStudentField("parent_email")} /><input required placeholder="Parent WhatsApp number" value={studentForm.parent_phone} onChange={setStudentField("parent_phone")} />{locationInput("student", studentForm.parent_location, "Parent home location in Kenya")}<select required value={studentForm.grade_key} onChange={(event) => setStudentForm((current) => ({ ...current, grade_key: event.target.value, class_name: "" }))}><option value="">Select grade</option>{gradeOptions.map((grade) => <option key={grade}>{grade}</option>)}</select><select required value={studentForm.class_name} onChange={setStudentField("class_name")}><option value="">Select class</option>{data.classes?.filter((item) => item.grade === studentForm.grade_key).map((item) => <option key={item.id}>{item.name}</option>)}</select><input placeholder="Current class teacher (optional)" value={studentForm.teacher} onChange={setStudentField("teacher")} /><fieldset className="institution-subject-picker"><legend>Underperforming subjects</legend>{SUBJECTS.map((subject) => <label key={subject}><input type="checkbox" checked={studentForm.subjects.includes(subject)} onChange={(event) => setStudentForm((current) => ({ ...current, subjects: event.target.checked ? [...current.subjects, subject] : current.subjects.filter((item) => item !== subject) }))} />{subject}</label>)}</fieldset><fieldset className="institution-subject-picker"><legend>Optional course interests</legend>{["Cybersecurity", "Python", "Web Design/Website", "Computer Packages"].map((interest) => <label key={interest}><input type="checkbox" checked={studentForm.course_interests.includes(interest)} onChange={(event) => setStudentForm((current) => ({ ...current, course_interests: event.target.checked ? [...current.course_interests, interest] : current.course_interests.filter((item) => item !== interest) }))} />{interest}</label>)}</fieldset><button className="institution-btn" disabled={busy}>Register learner</button></form>
         <h3 className="institution-list-heading">Learner roster</h3><div className="institution-record-list">{data.students?.map((student) => <article className="institution-record institution-record-student" key={student.id}><div><strong>{student.full_name}</strong><p>{student.grade_key} · {student.class_name} · {student.parent_name}</p><small>{student.registration_no || student.external_id}</small></div><div className="institution-recommend-actions">{subjects(student.underperforming_subjects_json).map((subject) => <button type="button" disabled={busy} key={subject} onClick={() => recommend(student, subject)}>Recommend {subject}</button>)}</div></article>)}{!counts.learners && <p>No learners registered yet.</p>}</div></section>}
-      {activeTab === "Coaches" && <section className="institution-tab-panel"><p className="institution-dashboard-eyebrow">Teaching team</p><h2>Add a teacher</h2><form className="institution-data-form institution-form-grid" onSubmit={saveStaff}><input required placeholder="Teacher name" value={staffForm.full_name} onChange={setStaffField("full_name")} /><input type="email" placeholder="Teacher email" value={staffForm.email} onChange={setStaffField("email")} /><input placeholder="WhatsApp number" value={staffForm.whatsapp} onChange={setStaffField("whatsapp")} />{locationInput("staff", staffForm.location, "Teacher home location in Kenya")}<input placeholder="Subjects taught, comma separated" value={staffForm.subjects} onChange={setStaffField("subjects")} /><button className="institution-btn" disabled={busy}>Add teacher</button></form><h3 className="institution-list-heading">Teaching team</h3><div className="institution-record-list">{data.staff?.map((teacher) => <div className="institution-record" key={teacher.id}><div><strong>{teacher.full_name}</strong><p>{teacher.email || "No email"} · {teacher.whatsapp || "No WhatsApp"}</p></div><span>{teacher.location || "Location not added"}</span></div>)}{!counts.teachers && <p>No teachers added yet.</p>}</div></section>}
+      {activeTab === "Coaches" && <section className="institution-tab-panel institution-catalog-page">
+        <p className="institution-dashboard-eyebrow">Teaching team</p>
+        <h2>Teachers</h2>
+        <p className="institution-catalog-intro">Select a teacher to see learners assigned to them.</p>
+        <form className="institution-data-form institution-form-grid institution-coach-form" onSubmit={saveStaff}>
+          <input required placeholder="Teacher name" value={staffForm.full_name} onChange={setStaffField("full_name")} />
+          <input type="email" placeholder="Teacher email" value={staffForm.email} onChange={setStaffField("email")} />
+          <input placeholder="WhatsApp number" value={staffForm.whatsapp} onChange={setStaffField("whatsapp")} />
+          {locationInput("staff", staffForm.location, "Teacher home location in Kenya")}
+          <input placeholder="Subjects taught, comma separated" value={staffForm.subjects} onChange={setStaffField("subjects")} />
+          <button className="institution-btn" disabled={busy}>Add teacher</button>
+        </form>
+        {selectedTeacher && <section className="institution-selected-detail" aria-live="polite">
+          <div className="institution-detail-heading"><div><p className="institution-dashboard-eyebrow">Teacher profile</p><h3>{selectedTeacher.full_name}</h3><p>{teacherStudents.length} {teacherStudents.length === 1 ? "assigned learner" : "assigned learners"}</p></div><button type="button" onClick={() => setSelectedTeacherId(null)}>Close teacher details</button></div>
+          <div className="institution-detail-roster">
+            {teacherStudents.map((student) => <article className="institution-roster-card" key={student.id}><span className="institution-roster-avatar">{student.full_name?.trim()?.[0]?.toUpperCase() || "L"}</span><div><strong>{student.full_name}</strong><p>{student.grade_key} · {student.class_name}</p><small>Registration: {student.registration_no || student.external_id || "Not provided"}</small></div></article>)}
+            {!teacherStudents.length && <p className="institution-empty-state">No learners are assigned to this teacher yet. Add this teacher as the current class teacher when registering a learner.</p>}
+          </div>
+        </section>}
+        <div className="institution-netflix-grid institution-teacher-grid">
+          {data.staff?.map((teacher, index) => <button className={`institution-teacher-card institution-card-tone-${index % 4}`} type="button" key={teacher.id} aria-pressed={String(teacher.id) === String(selectedTeacherId)} onClick={() => setSelectedTeacherId(teacher.id)}>
+            <span className="institution-teacher-avatar">{teacher.full_name?.trim()?.[0]?.toUpperCase() || "T"}</span><strong>{teacher.full_name}</strong><span>{subjects(teacher.subjects_json).join(" · ") || "Teaching team"}</span><span>{teacher.location || "Location not added"}</span><span className="institution-card-open">View assigned learners <span aria-hidden="true">→</span></span>
+          </button>)}
+          {!counts.teachers && <p className="institution-empty-state">No teachers added yet. Add a teacher above to get started.</p>}
+        </div>
+        <div className="institution-floating-action"><button className="institution-btn" type="button" onClick={() => document.querySelector(".institution-coach-form")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Add teacher</button></div>
+      </section>}
       {activeTab === "Settings" && <section className="institution-tab-panel"><p className="institution-dashboard-eyebrow">Settings / Profile</p><h2>Institution profile</h2><div className="institution-settings-layout"><form className="institution-data-form" onSubmit={saveProfile}><input required placeholder="Institution name" value={profile.name || ""} onChange={(event) => setProfile((current) => ({ ...current, name: event.target.value }))} />{locationInput("profile", profile.location || "", "Institution location in Kenya")}<input placeholder="Phone number" value={profile.phone || ""} onChange={(event) => setProfile((current) => ({ ...current, phone: event.target.value }))} /><select value={profile.school_type || "junior"} onChange={(event) => setProfile((current) => ({ ...current, school_type: event.target.value }))}><option value="junior">CBC Primary / Junior (Grades 1–9)</option><option value="senior">CBC Senior School (Grades 10–12)</option></select><input placeholder="Institution logo URL" value={profile.logo_url || ""} onChange={(event) => setProfile((current) => ({ ...current, logo_url: event.target.value }))} /><textarea placeholder="Institution motto" value={profile.motto || ""} onChange={(event) => setProfile((current) => ({ ...current, motto: event.target.value }))} /><button className="institution-btn" disabled={busy}>Save profile</button></form><aside className="institution-profile-preview"><p className="institution-dashboard-eyebrow">Profile preview</p>{profile.logo_url && <img src={profile.logo_url.startsWith("/") ? `${API_BASE}${profile.logo_url}` : profile.logo_url} alt="Institution profile" />}<h3>{profile.name}</h3><p>{profile.motto || "Institution motto"}</p><small>{profile.location}</small><small>{profile.phone}</small></aside></div><button className="institution-btn institution-dashboard-btn institution-signout" type="button" onClick={onSignOut}>Sign out of institution</button></section>}
     </section>
   </main>;

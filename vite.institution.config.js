@@ -8,7 +8,10 @@ export default defineConfig({
     name: "institution-root",
     configureServer(server) {
       server.middlewares.use((req, _res, next) => {
-        if (req.url === "/" || req.url === "/index.html") req.url = "/institution.html";
+        const [pathname, query] = (req.url || "").split("?", 2);
+        if (pathname === "/" || pathname === "/index.html") {
+          req.url = `/institution.html${query ? `?${query}` : ""}`;
+        }
         next();
       });
     },

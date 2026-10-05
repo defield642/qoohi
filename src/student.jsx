@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaBookOpen, FaLink, FaWhatsapp } from "react-icons/fa";
-import { GlassPanel, SectionLabel } from "./UserUi.jsx";
+import { GlassPanel, SectionLabel, SpeakTextButton } from "./UserUi.jsx";
 import RegistrationGrowthChart from "./RegistrationGrowthChart.jsx";
 
 const TOPICS = {
@@ -268,7 +268,7 @@ export default function GuestDashboard({ onRegisterRole, apiBase = "" }) {
           <button type="submit" disabled={aiLoading || !topic || (topic === "__custom__" && !customTopic.trim())} className="rounded-full bg-violet-600 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50">{aiLoading ? "Teaching…" : "Ask the tutor"}</button>
         </form>}
         {aiError && <p role="alert" className="mt-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-base font-semibold text-rose-900">{aiError}</p>}
-        {aiReply && <div className="mt-4 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-2xl bg-violet-50 p-4 text-sm leading-6 text-slate-700">{aiReply}</div>}
+        {aiReply && <div className="mt-4 max-h-64 overflow-y-auto rounded-2xl bg-violet-50 p-4 text-sm leading-6 text-slate-700"><p className="whitespace-pre-wrap">{aiReply}</p><SpeakTextButton text={aiReply} lang={subject === "Kiswahili" ? "sw-KE" : "en-KE"} className="mt-3" /></div>}
       </div>
     </div>
     <div className="preview-card mt-5 rounded-[1.5rem] bg-white p-6 shadow-sm">

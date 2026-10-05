@@ -102,13 +102,40 @@ CREATE TABLE IF NOT EXISTS teacher_classes (
  id BIGSERIAL PRIMARY KEY,
  teacher_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  name VARCHAR(180) NOT NULL,
+ subject VARCHAR(160) NOT NULL DEFAULT '',
+ grade VARCHAR(40) NOT NULL DEFAULT '',
+ description TEXT NOT NULL DEFAULT '',
  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
  UNIQUE(teacher_id,name)
 );
+ALTER TABLE teacher_classes ADD COLUMN IF NOT EXISTS subject VARCHAR(160) NOT NULL DEFAULT '';
+ALTER TABLE teacher_classes ADD COLUMN IF NOT EXISTS grade VARCHAR(40) NOT NULL DEFAULT '';
+ALTER TABLE teacher_classes ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS teacher_class_students (
  class_id BIGINT NOT NULL REFERENCES teacher_classes(id) ON DELETE CASCADE,
  student_user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  PRIMARY KEY(class_id,student_user_id)
+);
+CREATE TABLE IF NOT EXISTS teacher_class_members (
+ class_id BIGINT NOT NULL REFERENCES teacher_classes(id) ON DELETE CASCADE,
+ learner_type VARCHAR(24) NOT NULL CHECK (learner_type IN ('user','parent_child','institution')),
+ learner_id BIGINT NOT NULL,
+ enrolled_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ PRIMARY KEY(class_id,learner_type,learner_id)
+);
+CREATE INDEX IF NOT EXISTS idx_teacher_class_members_learner ON teacher_class_members(learner_type,learner_id,class_id);
+INSERT INTO teacher_class_members(class_id,learner_type,learner_id)
+ SELECT class_id,'user',student_user_id FROM teacher_class_students ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS teacher_lessons (
+ id BIGSERIAL PRIMARY KEY,
+ class_id BIGINT NOT NULL REFERENCES teacher_classes(id) ON DELETE CASCADE,
+ teacher_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ title VARCHAR(240) NOT NULL,
+ subject VARCHAR(160) NOT NULL DEFAULT '',
+ starts_at TIMESTAMPTZ,
+ meeting_url TEXT NOT NULL DEFAULT '',
+ notes TEXT NOT NULL DEFAULT '',
+ created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS teacher_progress (
  id BIGSERIAL PRIMARY KEY,
@@ -131,6 +158,29 @@ CREATE TABLE IF NOT EXISTS teacher_assignments (
  content_type VARCHAR(120) NOT NULL DEFAULT 'application/pdf',
  content BYTEA NOT NULL,
  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE teacher_assignments ADD COLUMN IF NOT EXISTS subject VARCHAR(160) NOT NULL DEFAULT '';
+ALTER TABLE teacher_assignments ADD COLUMN IF NOT EXISTS instructions TEXT NOT NULL DEFAULT '';
+ALTER TABLE teacher_assignments ADD COLUMN IF NOT EXISTS due_at TIMESTAMPTZ;
+ALTER TABLE teacher_assignments ADD COLUMN IF NOT EXISTS link_url TEXT NOT NULL DEFAULT '';
+ALTER TABLE teacher_assignments ALTER COLUMN filename DROP NOT NULL;
+ALTER TABLE teacher_assignments ALTER COLUMN content DROP NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_teacher_assignments_class ON teacher_assignments(class_id,teacher_id);
+CREATE TABLE IF NOT EXISTS teacher_assignment_submissions (
+ id BIGSERIAL PRIMARY KEY,
+ assignment_id BIGINT NOT NULL REFERENCES teacher_assignments(id) ON DELETE CASCADE,
+ learner_type VARCHAR(24) NOT NULL CHECK (learner_type IN ('user','parent_child','institution')),
+ learner_id BIGINT NOT NULL,
+ filename VARCHAR(255) NOT NULL,
+ content_type VARCHAR(120) NOT NULL DEFAULT 'application/pdf',
+ content BYTEA NOT NULL,
+ submitted_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+ score NUMERIC(8,2),
+ max_score NUMERIC(8,2),
+ feedback TEXT NOT NULL DEFAULT '',
+ marked_at TIMESTAMPTZ,
+ marked_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+ UNIQUE(assignment_id,learner_type,learner_id)
 );
 CREATE TABLE IF NOT EXISTS teacher_prices (
  teacher_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

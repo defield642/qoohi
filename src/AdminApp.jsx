@@ -22,7 +22,7 @@ import {
   FaUsers,
   FaWallet,
 } from "react-icons/fa";
-import QoohiLogo from "./assets/qoohiLogo.jpeg";
+const QoohiLogo = "/qoohi-icon.svg";
 const bg1 = QoohiLogo;
 const bg2 = QoohiLogo;
 const bg3 = QoohiLogo;
@@ -789,7 +789,7 @@ export default function AdminApp() {
   const selectedBalanceUser = users.find((user) => String(user.id) === String(balanceForm.userId)) || null;
 
   return (
-    <div className="app-light relative min-h-screen overflow-hidden bg-slate-100 text-slate-900">
+    <div className="app-light admin-dashboard relative min-h-screen overflow-hidden bg-slate-100 text-slate-900">
       {false && backgroundImages.map((img, index) => (
         <div
           key={index}
@@ -814,6 +814,7 @@ export default function AdminApp() {
           <section className="qoohi-admin-auth mx-auto mb-8 max-w-3xl rounded-[2.25rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl sm:p-8">
             <div className="qoohi-admin-auth-heading mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
+                <img src="/qoohi-icon.svg" alt="QOOHI" className="mb-4 h-12 w-12 rounded-xl" />
                 <p className="text-xs font-bold uppercase tracking-[0.34em] text-cyan-200">Administrator sign in</p>
                 <h1 className="mt-2 text-4xl font-black text-white">Admin portal</h1>
               </div>
@@ -1002,15 +1003,13 @@ export default function AdminApp() {
               <aside className="flex flex-col w-52 flex-shrink-0">
                 <div className="sticky top-24 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/90 backdrop-blur-xl">
                   <div className="border-b border-white/10 p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-cyan-500/20">
-                        <FaShieldAlt className="text-cyan-400" />
-                      </div>
+                    <a href="/" className="flex items-center gap-3" aria-label="Return to QOOHI home">
+                      <img src="/qoohi-icon.svg" alt="" className="h-10 w-10 flex-shrink-0 rounded-xl" />
                       <div className="min-w-0">
                         <p className="truncate text-sm font-black text-white">QOOHI Admin</p>
                         <p className="truncate text-[10px] text-slate-500">Management Console</p>
                       </div>
-                    </div>
+                    </a>
                   </div>
                   <nav className="space-y-0.5 p-2">
                     {adminNav.map(({ id, Icon, label }) => (
@@ -1027,6 +1026,7 @@ export default function AdminApp() {
                     ))}
                   </nav>
                   <div className="border-t border-white/10 p-3 space-y-1">
+                    <a href="/institution/" className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white">Institution portal</a>
                     <button type="button" onClick={loadOverview}
                       className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 transition hover:bg-white/5 hover:text-white"
                     >

@@ -1,6 +1,7 @@
 import { FaBookOpen, FaEnvelope } from "react-icons/fa";
 import { useEffect, useRef, useState } from "react";
-import { ActionButton, GlassPanel, Input, SectionLabel } from "./UserUi.jsx";
+import { ActionButton, GlassPanel, Input, SectionLabel, SpeakTextButton } from "./UserUi.jsx";
+import { LearnerClasses } from "./teacher.jsx";
 
 const API_BASE = import.meta.env.DEV ? "" : (import.meta.env.VITE_API_BASE || "");
 
@@ -98,6 +99,7 @@ export default function ParentDashboard({
   }
 
   if (view === "register-child") return <ParentRegisterChildSection authHeaders={authHeaders} onRefresh={onRefresh} fetchJson={fetchJson} />;
+  if (view === "classes") return <LearnerClasses authHeaders={authHeaders} fetchJson={fetchJson} />;
   if (view === "materials") return <ParentMaterialsSection authHeaders={authHeaders} balance={balance} openProfile={openProfile} openChat={openChat} fetchJson={fetchJson} />;
   if (view === "teacher") return <ParentMaterialsSection authHeaders={authHeaders} balance={balance} openProfile={openProfile} openChat={openChat} teacherOnly fetchJson={fetchJson} />;
   return null;
@@ -471,9 +473,6 @@ export function ParentMaterialsSection({ authHeaders, balance, openProfile, open
         {teacherCatalogError && <p role="alert" className="rounded-xl bg-rose-50 p-6 text-sm text-rose-700">{teacherCatalogError}</p>}
         {!teacherCatalogLoading && !teacherCatalogError && filteredTeachers.length === 0 && <p className="rounded-xl border border-dashed border-slate-300 p-6 text-sm text-slate-500">{marketTeachers.length ? "No teachers match these filters." : "No teachers are listed yet."}</p>}
       </div>
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
-        {subjects.map((subject) => <div key={subject} className="rounded-2xl border border-slate-200 bg-white p-4"><p className="font-bold text-slate-800">{subject}</p><button type="button" onClick={() => fetchTeacherSuggest(subject)} disabled={teacherResults[subject]?.loading} className="mt-3 w-full rounded-full border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs font-black text-cyan-800">{teacherResults[subject]?.loading ? "Finding..." : "Find teacher"}</button>{teacherResults[subject]?.reason && <p className="mt-2 text-xs text-slate-500">{teacherResults[subject].reason}</p>}{teacherResults[subject]?.teacher && <button type="button" onClick={() => openChat?.(teacherResults[subject].teacher.id, teacherResults[subject].teacher.name)} className="mt-2 text-xs font-bold text-cyan-800">Open chat</button>}</div>)}
-      </div>
     </GlassPanel>;
   }
 
@@ -698,8 +697,9 @@ export function ParentMaterialsSection({ authHeaders, balance, openProfile, open
                           <p className="text-xs text-rose-400">{topicGuides[subject].error}</p>
                         )}
                         {topicGuides[subject]?.guide && (
-                          <div className="max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/60 p-3 text-xs leading-6 text-slate-300 whitespace-pre-wrap">
-                            {topicGuides[subject].guide}
+                          <div className="max-h-64 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/60 p-3 text-xs leading-6 text-slate-300">
+                            <p className="whitespace-pre-wrap">{topicGuides[subject].guide}</p>
+                            <SpeakTextButton text={topicGuides[subject].guide} lang={subject === "Kiswahili" ? "sw-KE" : "en-KE"} className="mt-3" />
                           </div>
                         )}
                       </div>

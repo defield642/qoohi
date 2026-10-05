@@ -8,10 +8,12 @@ export default defineConfig({
     name: 'spa-fallback',
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
-        if (req.url === '/admin') {
-          req.url = '/admin.html';
-        } else if (req.url === '/institution' || req.url === '/institution/') {
-          req.url = '/institution/index.html';
+        const [pathname, query] = (req.url || "").split("?", 2);
+        const suffix = query ? `?${query}` : "";
+        if (pathname === '/admin' || pathname === '/admin/') {
+          req.url = `/admin.html${suffix}`;
+        } else if (pathname === '/institution' || pathname === '/institution/') {
+          req.url = `/institution/index.html${suffix}`;
         }
         next();
       });
