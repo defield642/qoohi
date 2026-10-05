@@ -1026,7 +1026,6 @@ export default function AdminApp() {
                     ))}
                   </nav>
                   <div className="border-t border-white/10 p-3 space-y-1">
-                    <a href="/institution/" title="Institution portal" className="admin-dashboard-utility flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white"><span className="admin-dashboard-nav-label">Institution portal</span></a>
                     <button type="button" aria-label="Refresh Data" title="Refresh Data" onClick={loadOverview}
                       className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 transition hover:bg-white/5 hover:text-white"
                     >
