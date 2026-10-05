@@ -1483,7 +1483,7 @@ function DashboardPage({
         <aside className="sticky top-24 flex w-16 flex-shrink-0 flex-col sm:w-52">
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/90 backdrop-blur-xl">
             <div className="border-b border-white/10 p-2 sm:p-4">
-              <button type="button" onClick={() => setActiveSection("profile")} className="group flex w-full items-center justify-center gap-3 text-left sm:justify-start">
+              <button type="button" aria-label={`${firstName || fullName || roleLabel} profile`} title={firstName || fullName || roleLabel} onClick={() => setActiveSection("profile")} className="group flex w-full items-center justify-center gap-3 text-left sm:justify-start">
                 <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border-2 border-white/20 bg-slate-800 transition group-hover:border-cyan-400/40">
                   {profileAvatar
                     ? <img src={profileAvatar} alt="" className="h-full w-full object-cover" />
@@ -1525,7 +1525,7 @@ function DashboardPage({
               </div>
             )}
             <div className="border-t border-white/10 p-2">
-              <button type="button" onClick={logout}
+              <button type="button" aria-label="Sign Out" title="Sign Out" onClick={logout}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-rose-400 transition hover:bg-rose-500/10"
               >
                 <FaMinusCircle className="flex-shrink-0 text-[15px]" /> Sign Out

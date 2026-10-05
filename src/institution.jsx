@@ -148,7 +148,7 @@ export default function InstitutionDashboard({ data, token, refresh, onSignOut }
   return <main className="institution-dashboard-shell">
     <aside className="institution-sidebar">
       <a href="/" className="institution-brand" aria-label="Return to QOOHI home"><img className="institution-brand-mark" src={QOOHI_LOGO} alt="" /><div><b>QOOHI</b><small>Institution Portal</small></div></a>
-      <nav className="institution-sidebar-nav">{["Overview", "Classes", "Learners", "Coaches", "Settings"].map((item, index) => <button key={item} className={activeTab === item ? "active" : ""} type="button" onClick={() => { setActiveTab(item); setStatus(""); setError(""); }}><span>{["⌂", "▦", "♙", "♧", "⚙"][index]}</span>{item}</button>)}</nav>
+      <nav className="institution-sidebar-nav">{["Overview", "Classes", "Learners", "Coaches", "Settings"].map((item, index) => <button key={item} className={activeTab === item ? "active" : ""} aria-label={item} title={item} type="button" onClick={() => { setActiveTab(item); setStatus(""); setError(""); }}><span>{["⌂", "▦", "♙", "♧", "⚙"][index]}</span>{item}</button>)}</nav>
       <div className="institution-sidebar-account"><p>Signed in as</p><strong>{institution.email}</strong><button type="button" onClick={onSignOut}>Sign out</button></div>
     </aside>
     <section className="institution-dashboard-main">

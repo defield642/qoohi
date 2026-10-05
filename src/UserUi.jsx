@@ -61,21 +61,26 @@ function speechText(value) {
 
 export function SpeakTextButton({ text, lang = "en-KE", className = "" }) {
   const [status, setStatus] = useState("");
+  const [isActive, setIsActive] = useState(false);
   const speechActive = useRef(false);
   const owner = useRef({});
+  const nextChunkTimer = useRef(null);
 
   const stopSpeech = () => {
     if (activeSpeechOwner === owner.current && "speechSynthesis" in window) {
+      if (nextChunkTimer.current) window.clearTimeout(nextChunkTimer.current);
       window.speechSynthesis.cancel();
       activeSpeechOwner = null;
       stopActiveSpeech = null;
     }
     speechActive.current = false;
+    setIsActive(false);
     setStatus("");
   };
   useEffect(() => () => {
     if (speechActive.current && activeSpeechOwner === owner.current) {
       speechActive.current = false;
+      if (nextChunkTimer.current) window.clearTimeout(nextChunkTimer.current);
       window.speechSynthesis.cancel();
       activeSpeechOwner = null;
       stopActiveSpeech = null;
@@ -110,6 +115,7 @@ export function SpeakTextButton({ text, lang = "en-KE", className = "" }) {
     speechActive.current = true;
     activeSpeechOwner = owner.current;
     stopActiveSpeech = stopSpeech;
+    setIsActive(true);
     setStatus("Speaking");
 
     const speakChunk = (index) => {
@@ -126,13 +132,20 @@ export function SpeakTextButton({ text, lang = "en-KE", className = "" }) {
       utterance.rate = 0.9;
       utterance.pitch = 1.05;
       if (voice) utterance.voice = voice;
-      utterance.onend = () => speakChunk(index + 1);
-      utterance.onerror = () => {
+      utterance.onend = () => {
+        nextChunkTimer.current = window.setTimeout(() => speakChunk(index + 1), 0);
+      };
+      utterance.onerror = (event) => {
         if (!speechActive.current || activeSpeechOwner !== owner.current) return;
         speechActive.current = false;
         activeSpeechOwner = null;
         stopActiveSpeech = null;
-        setStatus("Audio playback stopped. Press Listen to try again.");
+        setIsActive(false);
+        setStatus(
+          event.error === "canceled" || event.error === "interrupted"
+            ? ""
+            : "Audio playback stopped. Press Listen to try again.",
+        );
       };
       synthesis.speak(utterance);
     };
@@ -151,7 +164,7 @@ export function SpeakTextButton({ text, lang = "en-KE", className = "" }) {
         <FaVolumeUp aria-hidden="true" />
         {status === "Paused" ? "Resume" : status === "Speaking" ? "Pause" : "Listen"}
       </button>
-      {speechActive.current && (
+      {isActive && (
         <button
           type="button"
           onClick={stopSpeech}

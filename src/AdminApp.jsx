@@ -809,7 +809,7 @@ export default function AdminApp() {
         />
       ))}
 
-      <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <div className={`relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-6 ${isDashboardReady ? "admin-dashboard-workspace" : ""}`}>
         {!isDashboardReady && (
           <section className="qoohi-admin-auth mx-auto mb-8 max-w-3xl rounded-[2.25rem] border border-white/10 bg-white/10 p-6 backdrop-blur-xl sm:p-8">
             <div className="qoohi-admin-auth-heading mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -997,7 +997,7 @@ export default function AdminApp() {
             )}
 
             {/* ── Admin Sidebar Layout ── */}
-            <div className="flex flex-row gap-6">
+            <div className="admin-dashboard-layout flex flex-row gap-6">
 
               {/* Admin Left Sidebar */}
               <aside className="flex flex-col w-52 flex-shrink-0">
@@ -1013,7 +1013,7 @@ export default function AdminApp() {
                   </div>
                   <nav className="space-y-0.5 p-2">
                     {adminNav.map(({ id, Icon, label }) => (
-                      <button key={id} type="button" onClick={() => setAdminSection(id)}
+                      <button key={id} type="button" aria-label={label} title={label} onClick={() => setAdminSection(id)}
                         className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${
                           adminSection === id
                             ? "bg-cyan-500/20 font-bold text-cyan-300"
@@ -1021,21 +1021,21 @@ export default function AdminApp() {
                         }`}
                       >
                         <Icon className={`flex-shrink-0 text-[15px] ${adminSection === id ? "text-cyan-400" : "text-slate-600"}`} />
-                        {label}
+                        <span className="admin-dashboard-nav-label">{label}</span>
                       </button>
                     ))}
                   </nav>
                   <div className="border-t border-white/10 p-3 space-y-1">
-                    <a href="/institution/" className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white">Institution portal</a>
-                    <button type="button" onClick={loadOverview}
+                    <a href="/institution/" title="Institution portal" className="admin-dashboard-utility flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white"><span className="admin-dashboard-nav-label">Institution portal</span></a>
+                    <button type="button" aria-label="Refresh Data" title="Refresh Data" onClick={loadOverview}
                       className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 transition hover:bg-white/5 hover:text-white"
                     >
-                      <FaRedo className="text-xs" /> Refresh Data
+                      <FaRedo className="text-xs" /><span className="admin-dashboard-nav-label">Refresh Data</span>
                     </button>
-                    <button type="button" onClick={logoutAdmin}
+                    <button type="button" aria-label="Logout" title="Logout" onClick={logoutAdmin}
                       className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-rose-400 transition hover:bg-rose-500/10 hover:text-rose-300"
                     >
-                      <FaTimes className="text-xs" /> Logout
+                      <FaTimes className="text-xs" /><span className="admin-dashboard-nav-label">Logout</span>
                     </button>
                   </div>
                 </div>
