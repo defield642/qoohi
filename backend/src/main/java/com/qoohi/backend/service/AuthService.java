@@ -60,7 +60,22 @@ public class AuthService {
   }
   public Map<String,Object> verifyCode(String email,String code,String purpose){email=normalize(email); List<Map<String,Object>> rows=db.queryForList("SELECT * FROM auth_codes WHERE email=? AND purpose=? AND consumed_at IS NULL AND expires_at>now() ORDER BY created_at DESC LIMIT 1",email,purpose); if(rows.isEmpty()||!hash(code).equals(rows.get(0).get("code_hash")))throw new IllegalArgumentException("Invalid or expired verification code."); db.update("UPDATE auth_codes SET consumed_at=now() WHERE id=?",rows.get(0).get("id")); return rows.get(0);}
   public UUID session(long userId, UUID institutionId) { UUID token=UUID.randomUUID(); db.update("INSERT INTO sessions(token,user_id,institution_id,expires_at) VALUES (?,?,?,?)",token,userId,institutionId,OffsetDateTime.now().plusDays(30)); return token; }
-  public Map<String,Object> user(String auth) { try { UUID token=UUID.fromString(auth==null?"":auth.replaceFirst("Bearer ","")); return db.queryForMap("SELECT u.*,s.institution_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>now()",token); } catch(Exception e) { return null; } }
+  public Map<String,Object> user(String authorization) {
+    if (authorization == null || authorization.isBlank()) return null;
+    String value = authorization.startsWith("Bearer ")
+      ? authorization.substring("Bearer ".length()).trim()
+      : authorization.trim();
+    UUID token;
+    try {
+      token = UUID.fromString(value);
+    } catch (IllegalArgumentException invalidToken) {
+      return null;
+    }
+    List<Map<String,Object>> rows = db.queryForList(
+      "SELECT u.*,s.institution_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token=? AND s.expires_at>now()",
+      token);
+    return rows.isEmpty() ? null : rows.get(0);
+  }
   private String hash(String value) { try { byte[] b=MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)); return HexFormat.of().formatHex(b); } catch(Exception e) { throw new IllegalStateException(e); } }
   private String randomAdminCode() { String upper="ABCDEFGHIJKLMNOPQRSTUVWXYZ", lower="abcdefghijklmnopqrstuvwxyz", digits="0123456789", special="!@#$%^&*()-_=+[]{}:,.?", all=upper+lower+digits+special; List<Character> chars=new ArrayList<>(); chars.add(upper.charAt(random.nextInt(upper.length()))); chars.add(lower.charAt(random.nextInt(lower.length()))); chars.add(digits.charAt(random.nextInt(digits.length()))); chars.add(special.charAt(random.nextInt(special.length()))); for(int i=4;i<32;i++) chars.add(all.charAt(random.nextInt(all.length()))); Collections.shuffle(chars,random); StringBuilder code=new StringBuilder(32); chars.forEach(code::append); return code.toString(); }
 }
