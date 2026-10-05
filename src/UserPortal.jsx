@@ -604,7 +604,7 @@ function Header({ route, goTo, dashboard }) {
             >
               Home
             </button>
-            <a href="/institution/" className="rounded-full px-2 py-2 text-[10px] font-black uppercase tracking-widest text-purple-100 transition hover:bg-purple-500/50 sm:px-4 sm:text-xs">Institution</a>
+            {dashboard && <a href="/institution/" className="rounded-full px-2 py-2 text-[10px] font-black uppercase tracking-widest text-purple-100 transition hover:bg-purple-500/50 sm:px-4 sm:text-xs">Institution</a>}
             <button
               type="button"
               onClick={() => goTo(dashboard ? "dashboard" : "login")}

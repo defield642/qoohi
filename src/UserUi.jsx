@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FaStop, FaVolumeUp } from "react-icons/fa";
 
+let activeSpeechOwner = null;
+let stopActiveSpeech = null;
+
 export function PageStack({ title, subtitle, children, compact = false, showPlatformLabel = true }) {
   return (
     <div className="space-y-12">
@@ -42,21 +45,42 @@ function speechChunks(text, maxLength = 1400) {
   return chunks;
 }
 
+function speechText(value) {
+  return String(value || "")
+    .replace(/```(?:[\w-]+)?\s*([\s\S]*?)```/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s*/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*(\d+)[.)]\s+/gm, "Step $1, ")
+    .replace(/[|*_~]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function SpeakTextButton({ text, lang = "en-KE", className = "" }) {
   const [status, setStatus] = useState("");
   const speechActive = useRef(false);
-
-  useEffect(() => () => {
-    const wasSpeaking = speechActive.current;
-    speechActive.current = false;
-    if (wasSpeaking && "speechSynthesis" in window) window.speechSynthesis.cancel();
-  }, []);
+  const owner = useRef({});
 
   const stopSpeech = () => {
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    if (activeSpeechOwner === owner.current && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      activeSpeechOwner = null;
+      stopActiveSpeech = null;
+    }
     speechActive.current = false;
     setStatus("");
   };
+  useEffect(() => () => {
+    if (speechActive.current && activeSpeechOwner === owner.current) {
+      speechActive.current = false;
+      window.speechSynthesis.cancel();
+      activeSpeechOwner = null;
+      stopActiveSpeech = null;
+    }
+  }, []);
 
   const listen = () => {
     if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) {
@@ -64,7 +88,7 @@ export function SpeakTextButton({ text, lang = "en-KE", className = "" }) {
       return;
     }
     const synthesis = window.speechSynthesis;
-    if (synthesis.speaking && speechActive.current) {
+    if (activeSpeechOwner === owner.current && speechActive.current) {
       if (synthesis.paused) {
         synthesis.resume();
         setStatus("Speaking");
@@ -75,20 +99,25 @@ export function SpeakTextButton({ text, lang = "en-KE", className = "" }) {
       return;
     }
 
+    stopActiveSpeech?.();
     synthesis.cancel();
-    const chunks = speechChunks(String(text || "").trim());
+    const chunks = speechChunks(speechText(text));
     if (!chunks.length) return;
+    const requestedLanguage = lang || "en-KE";
     const voices = synthesis.getVoices();
-    const requestedLanguage = /kiswahili|swahili/i.test(text) ? "sw-KE" : lang;
     const voice = voices.find((item) => item.lang.toLowerCase() === requestedLanguage.toLowerCase())
       || voices.find((item) => item.lang.toLowerCase().startsWith(requestedLanguage.slice(0, 2).toLowerCase()));
     speechActive.current = true;
+    activeSpeechOwner = owner.current;
+    stopActiveSpeech = stopSpeech;
     setStatus("Speaking");
 
     const speakChunk = (index) => {
-      if (!speechActive.current) return;
+      if (!speechActive.current || activeSpeechOwner !== owner.current) return;
       if (index >= chunks.length) {
         speechActive.current = false;
+        activeSpeechOwner = null;
+        stopActiveSpeech = null;
         setStatus("");
         return;
       }
@@ -99,9 +128,11 @@ export function SpeakTextButton({ text, lang = "en-KE", className = "" }) {
       if (voice) utterance.voice = voice;
       utterance.onend = () => speakChunk(index + 1);
       utterance.onerror = () => {
-        if (!speechActive.current) return;
+        if (!speechActive.current || activeSpeechOwner !== owner.current) return;
         speechActive.current = false;
-        setStatus("Audio reading could not continue.");
+        activeSpeechOwner = null;
+        stopActiveSpeech = null;
+        setStatus("Audio playback stopped. Press Listen to try again.");
       };
       synthesis.speak(utterance);
     };
@@ -113,7 +144,7 @@ export function SpeakTextButton({ text, lang = "en-KE", className = "" }) {
       <button
         type="button"
         onClick={listen}
-        disabled={!String(text || "").trim()}
+        disabled={!speechText(text)}
         aria-label={status === "Paused" ? "Resume AI explanation" : status === "Speaking" ? "Pause AI explanation" : "Listen to AI explanation"}
         className="inline-flex min-h-10 items-center gap-2 rounded-full border border-violet-300 bg-white px-4 py-2 text-sm font-bold text-violet-900 shadow-sm transition hover:bg-violet-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-700 disabled:cursor-not-allowed disabled:opacity-50"
       >

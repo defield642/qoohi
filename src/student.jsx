@@ -198,7 +198,7 @@ export default function GuestDashboard({ onRegisterRole, apiBase = "" }) {
       const response = await fetch(`${apiBase}/api/ai/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: `Teach Kenyan CBC Grade ${grade} ${subject}: ${selectedTopic}. Explain in age-appropriate steps and ask one short check-for-understanding question.` }),
+        body: JSON.stringify({ prompt: `Teach Kenyan CBC Grade ${grade} ${subject}: ${selectedTopic}. Do not return only an answer. Teach this mini-lesson in order: learning goal, numbered explanation steps, one fully worked example, one guided practice with a hint, then one short check-for-understanding question. Use age-appropriate language and stop after asking the check question.` }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || data.message || data.error || "The AI tutor is temporarily unavailable.");
