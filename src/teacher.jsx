@@ -75,9 +75,9 @@ function TeacherClasses({ authHeaders, workspace = {}, onRefresh, fetchJson }) {
   const [classForm, setClassForm] = useState({ name: "", subject: "", grade: "", description: "" });
   const [selectedClass, setSelectedClass] = useState(null);
   const [details, setDetails] = useState(null);
-  const [search, setSearch] = useState("");
-  const [learners, setLearners] = useState([]);
-  const [lessonForm, setLessonForm] = useState({ title: "", subject: "", startsAt: "", meetingUrl: "", notes: "" });
+  const [availableLearners, setAvailableLearners] = useState([]);
+  const [selectedLessonId, setSelectedLessonId] = useState(null);
+  const [lessonForm, setLessonForm] = useState({ title: "", subject: "", startsAt: "", meetingUrl: "", notes: "", notesFile: null });
   const [assignmentForm, setAssignmentForm] = useState({ title: "", subject: "", instructions: "", dueAt: "", linkUrl: "", file: null });
   const [marks, setMarks] = useState({});
   const [status, setStatus] = useState("");
@@ -87,23 +87,6 @@ function TeacherClasses({ authHeaders, workspace = {}, onRefresh, fetchJson }) {
 
   useEffect(() => setClasses(workspace.classes || []), [workspace.classes]);
 
-  useEffect(() => {
-    if (search.trim().length < 2) {
-      setLearners([]);
-      return undefined;
-    }
-    let active = true;
-    const timer = setTimeout(() => {
-      fetchJson(`/api/teacher/classes/learners?q=${encodeURIComponent(search.trim())}`, { headers: authorization ? { Authorization: authorization } : {} })
-        .then((data) => { if (active) setLearners(data.learners || []); })
-        .catch((requestError) => { if (active) setError(requestError.message || "Learners could not be searched."); });
-    }, 250);
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [authorization, fetchJson, search]);
-
   const refreshClasses = async () => {
     const data = await fetchJson("/api/teacher/classes", { headers: authHeaders });
     setClasses(data.classes || []);
@@ -111,8 +94,12 @@ function TeacherClasses({ authHeaders, workspace = {}, onRefresh, fetchJson }) {
   };
   const refreshDetails = async (classId = selectedClass?.id) => {
     if (!classId) return;
-    const data = await fetchJson(`/api/teacher/classes/${classId}`, { headers: authHeaders });
+    const [data, available] = await Promise.all([
+      fetchJson(`/api/teacher/classes/${classId}`, { headers: authHeaders }),
+      fetchJson(`/api/teacher/classes/${classId}/available-learners`, { headers: authHeaders }),
+    ]);
     setDetails(data);
+    setAvailableLearners(available.learners || []);
   };
   const run = async (operation, successMessage) => {
     setBusy(true);
@@ -141,12 +128,11 @@ function TeacherClasses({ authHeaders, workspace = {}, onRefresh, fetchJson }) {
   };
   const openClass = async (classItem) => {
     setSelectedClass(classItem);
-    setSearch("");
-    setLearners([]);
+    setDetails(null);
+    setSelectedLessonId(null);
     setError("");
     try {
-      const result = await fetchJson(`/api/teacher/classes/${classItem.id}`, { headers: authHeaders });
-      setDetails(result);
+      await refreshDetails(classItem.id);
     } catch (requestError) {
       setError(requestError.message || "Class details could not be loaded.");
     }
@@ -158,8 +144,6 @@ function TeacherClasses({ authHeaders, workspace = {}, onRefresh, fetchJson }) {
         headers: { ...authHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ learnerType: learner.learnerType, learnerId: learner.learnerId }),
       });
-      setSearch("");
-      setLearners([]);
       await refreshDetails();
       await refreshClasses();
     }, `${learner.fullName} added to class.`);
@@ -167,12 +151,21 @@ function TeacherClasses({ authHeaders, workspace = {}, onRefresh, fetchJson }) {
   const addLesson = async (event) => {
     event.preventDefault();
     await run(async () => {
+      const form = new FormData();
+      for (const [key, value] of Object.entries(lessonForm)) {
+        if (key === "notesFile") {
+          if (value) form.append("notesFile", value);
+        } else if (value) {
+          form.append(key, value);
+        }
+      }
       await fetchJson(`/api/teacher/classes/${selectedClass.id}/lessons`, {
         method: "POST",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify(lessonForm),
+        headers: { Authorization: authorization },
+        body: form,
       });
-      setLessonForm({ title: "", subject: selectedClass.subject || "", startsAt: "", meetingUrl: "", notes: "" });
+      setLessonForm({ title: "", subject: selectedClass.subject || "", startsAt: "", meetingUrl: "", notes: "", notesFile: null });
+      setSelectedLessonId(null);
       await refreshDetails();
       await refreshClasses();
     }, "Lesson scheduled.");
@@ -240,7 +233,7 @@ function TeacherClasses({ authHeaders, workspace = {}, onRefresh, fetchJson }) {
       {status && <p role="status" className="mt-4 rounded-xl bg-emerald-50 p-3 text-sm font-bold text-emerald-800">{status}</p>}
       <div className="qoohi-class-cards mt-6">
         {classes.map((classItem, index) => <button key={classItem.id} type="button" onClick={() => openClass(classItem)} className={`qoohi-class-card qoohi-class-tone-${index % 4}`}>
-          <span>{classItem.grade || classItem.subject || "QOOHI class"}</span><strong>{classItem.name}</strong><small>{classItem.subject || "Learning class"}{classItem.grade ? ` · ${classItem.grade}` : ""}</small><small>{Number(classItem.student_count || 0)} learners</small><b>Manage class <span aria-hidden="true">→</span></b>
+          <span>{classItem.grade || classItem.subject || "QOOHI class"}</span><strong>{classItem.name}</strong><small>{classItem.subject || "Learning class"}{classItem.grade ? ` · ${classItem.grade}` : ""}</small><small>{Number(classItem.student_count || 0)} learners</small><b>{Number(classItem.current_lesson || 0) ? `Current: Lesson ${classItem.current_lesson}` : "No lessons yet"} <span aria-hidden="true">→</span></b>
         </button>)}
         {!classes.length && <p className="rounded-2xl border border-dashed border-white/20 p-7 text-sm text-slate-400">No classes yet. Create your first class above.</p>}
       </div>
@@ -249,27 +242,36 @@ function TeacherClasses({ authHeaders, workspace = {}, onRefresh, fetchJson }) {
 
   return <GlassPanel className="p-5 sm:p-8">
     <button type="button" onClick={() => { setSelectedClass(null); setDetails(null); setStatus(""); setError(""); }} className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white hover:bg-white/10">← All classes</button>
-    <div className="mt-5 flex flex-wrap items-start justify-between gap-3"><div><SectionLabel>{selectedClass.subject || "Class management"}</SectionLabel><h3 className="mt-2 text-3xl font-black text-white">{details?.class?.name || selectedClass.name}</h3><p className="mt-2 text-sm text-slate-400">{details?.class?.grade || selectedClass.grade || "Grade not specified"} · {(details?.learners || []).length} enrolled learners</p></div><span className="rounded-full bg-violet-100 px-4 py-2 text-sm font-black text-violet-800">{details?.class?.subject || selectedClass.subject || "Learning class"}</span></div>
+    <div className="mt-5 flex flex-wrap items-start justify-between gap-3"><div><SectionLabel>{selectedClass.subject || "Class management"}</SectionLabel><h3 className="mt-2 text-3xl font-black text-white">{details?.class?.name || selectedClass.name}</h3><p className="mt-2 text-sm text-slate-400">{details?.class?.grade || selectedClass.grade || "Grade not specified"} · {(details?.learners || []).length} enrolled learners · {Number(details?.class?.currentLesson || 0) ? `Lesson ${details.class.currentLesson} current` : "No lessons yet"}</p></div><span className="rounded-full bg-violet-100 px-4 py-2 text-sm font-black text-violet-800">{details?.class?.subject || selectedClass.subject || "Learning class"}</span></div>
     {(status || error) && <p role={error ? "alert" : "status"} className={`mt-4 rounded-xl p-3 text-sm font-bold ${error ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800"}`}>{error || status}</p>}
     <div className="mt-6 grid gap-5 xl:grid-cols-2">
       <section className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-900">
-        <h4 className="text-lg font-black text-slate-900">Learners</h4>
-        <div className="mt-3"><label htmlFor="class-learner-search" className="sr-only">Search learners to add</label><input id="class-learner-search" value={search} onChange={(event) => { setSearch(event.target.value); setError(""); }} placeholder="Search registered learner by name or email" className="w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm text-slate-900" /></div>
-        {learners.length > 0 && <div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-slate-200">{learners.map((learner) => <div key={`${learner.learnerType}-${learner.learnerId}`} className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 last:border-0"><span className="min-w-0"><strong className="block truncate text-sm">{learner.fullName}</strong><small className="text-slate-500">{learner.grade || "Grade not listed"} · {learner.learnerType.replace("_", " ")}</small></span><button type="button" disabled={busy || details?.learners?.some((item) => item.learnerType === learner.learnerType && Number(item.learnerId) === Number(learner.learnerId))} onClick={() => addLearner(learner)} className="shrink-0 rounded-full bg-violet-700 px-3 py-2 text-xs font-black text-white disabled:bg-slate-300">Add</button></div>)}</div>}
-        {search.trim().length >= 2 && !learners.length && <p className="mt-2 text-xs text-slate-500">No matching learners found.</p>}
+        <h4 className="text-lg font-black text-slate-900">Add learners</h4>
+        <p className="mt-1 text-xs text-slate-600">Choose from the registered learner cards and add them directly to this class.</p>
+        <div className="no-scrollbar mt-3 flex snap-x gap-3 overflow-x-auto pb-2">
+          {availableLearners.map((learner) => <article key={`${learner.learnerType}-${learner.learnerId}`} className="w-52 shrink-0 snap-start rounded-xl border border-violet-100 bg-violet-50 p-3">
+            <strong className="block truncate text-sm text-slate-900">{learner.fullName}</strong>
+            <p className="mt-1 text-xs capitalize text-slate-600">{learner.grade || "Grade not listed"} · {learner.learnerType.replace("_", " ")}</p>
+            <button type="button" disabled={busy} onClick={() => addLearner(learner)} className="mt-3 w-full rounded-full bg-violet-700 px-3 py-2 text-xs font-black text-white disabled:opacity-50">Add to this class</button>
+          </article>)}
+          {!availableLearners.length && <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500">All available learners are already in this class, or no learner registrations are available yet.</p>}
+        </div>
+        <h5 className="mt-4 font-black text-slate-900">Class roster · {Number(details?.class?.currentLesson || 0) ? `Current lesson ${details.class.currentLesson}` : "No lessons yet"}</h5>
         <div className="mt-4 grid gap-2 sm:grid-cols-2">{(details?.learners || []).map((learner) => {
           const graded = (details?.submissions || []).filter((item) => item.learnerType === learner.learnerType && Number(item.learnerId) === Number(learner.learnerId) && item.score !== null && item.maxScore > 0);
           const average = graded.length ? Math.round(graded.reduce((sum, item) => sum + (Number(item.score) / Number(item.maxScore)) * 100, 0) / graded.length) : null;
-          return <article key={`${learner.learnerType}-${learner.learnerId}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3"><strong className="text-sm text-slate-900">{learner.fullName}</strong><p className="mt-1 text-xs text-slate-600">{learner.grade || "Grade not listed"} · {learner.learnerType.replace("_", " ")}</p><p className="mt-2 text-xs font-bold text-violet-800">{graded.length} marked / {details?.assignments?.length || 0} assignments{average !== null ? ` · ${average}% average` : ""}</p></article>;
-        })}</div>
+          return <article key={`${learner.learnerType}-${learner.learnerId}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3"><strong className="text-sm text-slate-900">{learner.fullName}</strong><p className="mt-1 text-xs text-slate-600">{learner.grade || "Grade not listed"} · {learner.learnerType.replace("_", " ")}</p><p className="mt-1 text-xs font-bold text-cyan-800">{Number(details?.class?.currentLesson || 0) ? `Current lesson: ${details.class.currentLesson}` : "Lesson not started"}</p><p className="mt-2 text-xs font-bold text-violet-800">{graded.length} marked / {details?.assignments?.length || 0} assignments{average !== null ? ` · ${average}% average` : ""}</p></article>;
+        })}{!details?.learners?.length && <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">No learners are enrolled yet.</p>}</div>
       </section>
       <form onSubmit={addLesson} className="grid content-start gap-3 rounded-2xl border border-cyan-200 bg-cyan-50 p-4">
-        <h4 className="text-lg font-black text-cyan-950">Schedule a lesson</h4>
+        <h4 className="text-lg font-black text-cyan-950">Add lesson {Number(details?.class?.currentLesson || 0) + 1}</h4>
         <input required value={lessonForm.title} onChange={(event) => setLessonForm((current) => ({ ...current, title: event.target.value }))} placeholder="Lesson title" className="rounded-xl border border-cyan-200 bg-white px-3 py-3 text-sm text-slate-900" />
         <div className="grid gap-3 sm:grid-cols-2"><input value={lessonForm.subject || selectedClass.subject || ""} onChange={(event) => setLessonForm((current) => ({ ...current, subject: event.target.value }))} placeholder="Subject" className="rounded-xl border border-cyan-200 bg-white px-3 py-3 text-sm text-slate-900" /><input type="datetime-local" value={lessonForm.startsAt} onChange={(event) => setLessonForm((current) => ({ ...current, startsAt: event.target.value }))} className="rounded-xl border border-cyan-200 bg-white px-3 py-3 text-sm text-slate-900" /></div>
         <input type="url" value={lessonForm.meetingUrl} onChange={(event) => setLessonForm((current) => ({ ...current, meetingUrl: event.target.value }))} placeholder="Class meeting link (https://…)" className="rounded-xl border border-cyan-200 bg-white px-3 py-3 text-sm text-slate-900" />
         <textarea rows="2" value={lessonForm.notes} onChange={(event) => setLessonForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Lesson notes" className="rounded-xl border border-cyan-200 bg-white px-3 py-3 text-sm text-slate-900" />
-        <ActionButton type="submit" disabled={busy || !lessonForm.title.trim()} className="!rounded-xl !py-3 !text-sm">Add lesson</ActionButton>
+        <label className="grid gap-1 text-sm font-bold text-cyan-950">Upload lesson notes (PDF, optional)<input type="file" accept="application/pdf,.pdf" onChange={(event) => { setLessonForm((current) => ({ ...current, notesFile: event.target.files?.[0] || null })); event.currentTarget.value = ""; }} className="rounded-xl border border-cyan-200 bg-white p-2 text-sm text-slate-900" /></label>
+        {lessonForm.notesFile && <p className="text-xs font-semibold text-cyan-900">Selected: {lessonForm.notesFile.name}</p>}
+        <ActionButton type="submit" disabled={busy || !lessonForm.title.trim()} className="!rounded-xl !py-3 !text-sm">Save lesson {Number(details?.class?.currentLesson || 0) + 1}</ActionButton>
       </form>
       <form onSubmit={addAssignment} className="grid content-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
         <h4 className="text-lg font-black text-amber-950">Post an assignment</h4>
@@ -281,8 +283,16 @@ function TeacherClasses({ authHeaders, workspace = {}, onRefresh, fetchJson }) {
         <ActionButton type="submit" disabled={busy || (!assignmentForm.file && !assignmentForm.linkUrl.trim())} className="!rounded-xl !py-3 !text-sm">Post assignment</ActionButton>
       </form>
       <section className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-900">
-        <h4 className="text-lg font-black text-slate-900">Lessons</h4>
-        <div className="mt-3 grid gap-2">{(details?.lessons || []).map((lesson) => <article key={lesson.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3"><strong>{lesson.title}</strong><p className="text-xs text-slate-600">{lesson.subject || selectedClass.subject || "Lesson"}{lesson.starts_at ? ` · ${new Date(lesson.starts_at).toLocaleString()}` : ""}</p>{lesson.notes && <p className="mt-1 text-sm text-slate-700">{lesson.notes}</p>}{lesson.meeting_url && <a href={lesson.meeting_url} target="_blank" rel="noreferrer" className="mt-2 inline-flex rounded-full bg-violet-100 px-3 py-2 text-xs font-black text-violet-800">Open class link</a>}</article>)}{!details?.lessons?.length && <p className="text-sm text-slate-500">No lessons scheduled yet.</p>}</div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-lg font-black text-slate-900">Lesson library</h4><span className="rounded-full bg-cyan-100 px-3 py-1 text-xs font-black text-cyan-900">Current: Lesson {details?.class?.currentLesson || 0}</span></div>
+        <div className="qoohi-class-cards mt-3">{(details?.lessons || []).map((lesson, index) => <button key={lesson.id} type="button" onClick={() => setSelectedLessonId(String(selectedLessonId) === String(lesson.id) ? null : lesson.id)} aria-expanded={String(selectedLessonId) === String(lesson.id)} className={`qoohi-class-card qoohi-class-tone-${index % 4} !min-h-40`}>
+          <span>Lesson {lesson.lessonNumber}</span><strong>{lesson.title}</strong><small>{lesson.subject || selectedClass.subject || "Class lesson"}</small><b>{String(selectedLessonId) === String(lesson.id) ? "Close lesson" : "Open lesson"} <span aria-hidden="true">→</span></b>
+        </button>)}{!details?.lessons?.length && <p className="text-sm text-slate-500">No lessons have been added yet.</p>}</div>
+        {details?.lessons?.filter((lesson) => String(lesson.id) === String(selectedLessonId)).map((lesson) => <article key={`lesson-detail-${lesson.id}`} className="mt-4 rounded-2xl border border-cyan-200 bg-cyan-50 p-4">
+          <p className="text-xs font-black uppercase tracking-widest text-cyan-800">Lesson {lesson.lessonNumber}</p><h5 className="mt-1 text-lg font-black text-slate-900">{lesson.title}</h5><p className="mt-1 text-xs font-semibold text-slate-600">{lesson.subject || selectedClass.subject || "Lesson"}{lesson.starts_at ? ` · ${new Date(lesson.starts_at).toLocaleString()}` : ""}</p>
+          {lesson.notes && <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{lesson.notes}</p>}
+          {lesson.meeting_url && <a href={lesson.meeting_url} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-full bg-violet-700 px-4 py-2 text-xs font-black text-white">Open class link</a>}
+          {lesson.notesFilename && <button type="button" onClick={() => run(() => openProtectedFile(`/api/classes/lessons/${lesson.id}/notes`), "Lesson notes download started.")} className="mt-3 inline-flex rounded-full border border-cyan-300 bg-white px-4 py-2 text-xs font-black text-cyan-950">Download lesson notes PDF</button>}
+        </article>)}
       </section>
     </div>
     <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 text-slate-900">
@@ -309,6 +319,7 @@ function TeacherClasses({ authHeaders, workspace = {}, onRefresh, fetchJson }) {
 export function LearnerClasses({ authHeaders, fetchJson }) {
   const [classes, setClasses] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedLessonId, setSelectedLessonId] = useState(null);
   const [selectedLearnerKey, setSelectedLearnerKey] = useState("");
   const [files, setFiles] = useState({});
   const [status, setStatus] = useState("");
@@ -390,20 +401,33 @@ export function LearnerClasses({ authHeaders, fetchJson }) {
       setBusyId(null);
     }
   };
+  const openLessonNotes = async (lesson) => {
+    const response = await fetch(`/api/classes/lessons/${lesson.id}/notes`, { headers: authorization ? { Authorization: authorization } : {} });
+    if (!response.ok) {
+      const problem = await response.json().catch(() => ({}));
+      throw new Error(problem.error || "Lesson notes could not be downloaded.");
+    }
+    const objectUrl = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = response.headers.get("Content-Disposition")?.match(/filename="?([^";]+)"?/i)?.[1] || "lesson-notes.pdf";
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  };
 
   if (loading) return <GlassPanel className="p-6 sm:p-8"><p className="text-sm font-bold text-slate-600">Loading your classes…</p></GlassPanel>;
   if (!selectedClass) return <GlassPanel className="p-6 sm:p-8">
     <SectionLabel>Learning workspace</SectionLabel><div className="mt-2 flex flex-wrap items-end justify-between gap-3"><div><h3 className="text-2xl font-black text-white">My classes</h3><p className="mt-2 text-sm text-slate-400">Lessons, assignments, marks, and progress shared by your teachers.</p></div><span className="rounded-full bg-violet-100 px-4 py-2 text-sm font-black text-violet-800">{groupedClasses.length} classes</span></div>
     {error && <p role="alert" className="mt-4 rounded-xl bg-rose-50 p-3 text-sm font-bold text-rose-800">{error}</p>}
-    <div className="qoohi-class-cards mt-6">{groupedClasses.map((item, index) => <button key={item.id} type="button" onClick={() => { setSelectedId(item.id); setSelectedLearnerKey(`${item.learners[0].learnerType}-${item.learners[0].learnerId}`); setError(""); setStatus(""); }} className={`qoohi-class-card qoohi-class-tone-${index % 4}`}><span>{item.grade || item.subject || "Class"}</span><strong>{item.name}</strong><small>{item.subject || "Learning class"} · {item.teacherName}</small><small>{item.learners.length} enrolled learner{item.learners.length === 1 ? "" : "s"}</small><b>Open class <span aria-hidden="true">→</span></b></button>)}{!groupedClasses.length && <p className="rounded-2xl border border-dashed border-white/20 p-7 text-sm text-slate-400">No classes have been assigned yet. Your teacher will add your class here.</p>}</div>
+    <div className="qoohi-class-cards mt-6">{groupedClasses.map((item, index) => <button key={item.id} type="button" onClick={() => { setSelectedId(item.id); setSelectedLearnerKey(`${item.learners[0].learnerType}-${item.learners[0].learnerId}`); setSelectedLessonId(null); setError(""); setStatus(""); }} className={`qoohi-class-card qoohi-class-tone-${index % 4}`}><span>{item.grade || item.subject || "Class"}</span><strong>{item.name}</strong><small>{item.subject || "Learning class"} · {item.teacherName}</small><small>{item.learners.length} enrolled learner{item.learners.length === 1 ? "" : "s"}</small><b>{Number(item.currentLesson || 0) ? `Current: Lesson ${item.currentLesson}` : "No lessons yet"} <span aria-hidden="true">→</span></b></button>)}{!groupedClasses.length && <p className="rounded-2xl border border-dashed border-white/20 p-7 text-sm text-slate-400">No classes have been assigned yet. Your teacher will add your class here.</p>}</div>
   </GlassPanel>;
 
   const learnerAssignments = selectedLearner?.assignments || [];
   const marked = learnerAssignments.filter((item) => item.score !== null && Number(item.maxScore) > 0);
   const average = marked.length ? Math.round(marked.reduce((sum, item) => sum + Number(item.score) / Number(item.maxScore) * 100, 0) / marked.length) : null;
   return <GlassPanel className="p-5 sm:p-8">
-    <button type="button" onClick={() => { setSelectedId(null); setStatus(""); setError(""); }} className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white hover:bg-white/10">← All classes</button>
-    <div className="mt-5 flex flex-wrap items-start justify-between gap-3"><div><SectionLabel>{selectedClass.subject || "Class workspace"}</SectionLabel><h3 className="mt-2 text-3xl font-black text-white">{selectedClass.name}</h3><p className="mt-2 text-sm text-slate-400">{selectedClass.grade || selectedLearner?.learnerGrade || "Grade not specified"} · Teacher: {selectedClass.teacherName}</p></div>{selectedClass.learners.length > 1 && <label className="grid gap-1 text-sm font-bold text-white">Learner<select value={selectedLearnerKey} onChange={(event) => setSelectedLearnerKey(event.target.value)} className="min-w-48 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-slate-900">{selectedClass.learners.map((learner) => <option key={`${learner.learnerType}-${learner.learnerId}`} value={`${learner.learnerType}-${learner.learnerId}`}>{learner.learnerName}</option>)}</select></label>}</div>
+    <button type="button" onClick={() => { setSelectedId(null); setSelectedLessonId(null); setStatus(""); setError(""); }} className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white hover:bg-white/10">← All classes</button>
+    <div className="mt-5 flex flex-wrap items-start justify-between gap-3"><div><SectionLabel>{selectedClass.subject || "Class workspace"}</SectionLabel><h3 className="mt-2 text-3xl font-black text-white">{selectedClass.name}</h3><p className="mt-2 text-sm text-slate-400">{selectedClass.grade || selectedLearner?.learnerGrade || "Grade not specified"} · Teacher: {selectedClass.teacherName} · Current lesson: {selectedClass.currentLesson || 0}</p></div>{selectedClass.learners.length > 1 && <label className="grid gap-1 text-sm font-bold text-white">Learner<select value={selectedLearnerKey} onChange={(event) => setSelectedLearnerKey(event.target.value)} className="min-w-48 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-slate-900">{selectedClass.learners.map((learner) => <option key={`${learner.learnerType}-${learner.learnerId}`} value={`${learner.learnerType}-${learner.learnerId}`}>{learner.learnerName}</option>)}</select></label>}</div>
     {(status || error) && <p role={error ? "alert" : "status"} className={`mt-4 rounded-xl p-3 text-sm font-bold ${error ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800"}`}>{error || status}</p>}
     <section className="mt-6 rounded-2xl border border-white/10 bg-white/95 p-4 text-slate-900 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-lg font-black text-slate-900">Course progress</h4><span className="rounded-full bg-violet-100 px-3 py-1.5 text-sm font-black text-violet-900">{average === null ? "No marks published" : `${average}% average`}</span></div>
@@ -411,7 +435,7 @@ export function LearnerClasses({ authHeaders, fetchJson }) {
       {average !== null && <div className="mt-3 h-3 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-violet-700" style={{ width: `${average}%` }} /></div>}
     </section>
     <div className="mt-5 grid gap-5 lg:grid-cols-2">
-      <section className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4"><h4 className="text-lg font-black text-cyan-950">Lessons</h4><div className="mt-3 grid gap-3">{(selectedClass.lessons || []).map((lesson) => <article key={lesson.id} className="rounded-xl border border-cyan-100 bg-white p-4"><strong className="text-slate-900">{lesson.title}</strong><p className="mt-1 text-xs font-semibold text-slate-600">{lesson.subject || selectedClass.subject || "Lesson"}{lesson.starts_at ? ` · ${new Date(lesson.starts_at).toLocaleString()}` : ""}</p>{lesson.notes && <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{lesson.notes}</p>}{lesson.meeting_url && <a href={lesson.meeting_url} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-full bg-violet-700 px-4 py-2 text-xs font-black text-white">Join lesson</a>}</article>)}{!selectedClass.lessons?.length && <p className="rounded-xl bg-white p-4 text-sm text-slate-600">No lessons scheduled yet.</p>}</div></section>
+      <section className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h4 className="text-lg font-black text-cyan-950">Lesson library</h4><span className="rounded-full bg-cyan-100 px-3 py-1 text-xs font-black text-cyan-900">Current: Lesson {selectedClass.currentLesson || 0}</span></div><div className="qoohi-class-cards mt-3">{(selectedClass.lessons || []).map((lesson, index) => <button key={lesson.id} type="button" onClick={() => setSelectedLessonId(String(selectedLessonId) === String(lesson.id) ? null : lesson.id)} aria-expanded={String(selectedLessonId) === String(lesson.id)} className={`qoohi-class-card qoohi-class-tone-${index % 4} !min-h-40`}><span>Lesson {lesson.lessonNumber}</span><strong>{lesson.title}</strong><small>{lesson.subject || selectedClass.subject || "Class lesson"}</small><b>{String(selectedLessonId) === String(lesson.id) ? "Close lesson" : "Open lesson"} <span aria-hidden="true">→</span></b></button>)}{!selectedClass.lessons?.length && <p className="rounded-xl bg-white p-4 text-sm text-slate-600">No lessons have been added yet.</p>}</div>{selectedClass.lessons?.filter((lesson) => String(lesson.id) === String(selectedLessonId)).map((lesson) => <article key={`lesson-detail-${lesson.id}`} className="mt-4 rounded-2xl border border-cyan-200 bg-white p-4"><p className="text-xs font-black uppercase tracking-widest text-cyan-800">Lesson {lesson.lessonNumber}</p><h5 className="mt-1 text-lg font-black text-slate-900">{lesson.title}</h5><p className="mt-1 text-xs font-semibold text-slate-600">{lesson.subject || selectedClass.subject || "Lesson"}{lesson.starts_at ? ` · ${new Date(lesson.starts_at).toLocaleString()}` : ""}</p>{lesson.notes && <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{lesson.notes}</p>}{lesson.meeting_url && <a href={lesson.meeting_url} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-full bg-violet-700 px-4 py-2 text-xs font-black text-white">Join lesson</a>}{lesson.notesFilename && <button type="button" onClick={() => openLessonNotes(lesson).catch((requestError) => setError(requestError.message))} className="mt-3 inline-flex rounded-full border border-cyan-300 px-4 py-2 text-xs font-black text-cyan-950">Download lesson notes PDF</button>}</article>)}</section>
       <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><h4 className="text-lg font-black text-amber-950">Assignments</h4><div className="mt-3 grid gap-3">{learnerAssignments.map((assignment) => <article key={assignment.id} className="rounded-xl border border-amber-100 bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><strong className="text-slate-900">{assignment.title}</strong><p className="text-xs text-slate-600">{assignment.subject || selectedClass.subject || "Assignment"}{assignment.dueAt ? ` · Due ${new Date(assignment.dueAt).toLocaleString()}` : ""}</p></div>{assignment.markedAt && <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-900">Mark {assignment.score}/{assignment.maxScore}</span>}</div>
         {assignment.instructions && <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{assignment.instructions}</p>}
         <div className="mt-3 flex flex-wrap gap-2">{assignment.linkUrl && <a href={assignment.linkUrl} target="_blank" rel="noreferrer" className="rounded-full bg-violet-700 px-4 py-2 text-xs font-black text-white">Open assignment link</a>}{assignment.filename && <button type="button" onClick={() => openProtectedFile(`/api/classes/assignments/${assignment.id}/file`).catch((requestError) => setError(requestError.message))} className="rounded-full border border-violet-300 px-4 py-2 text-xs font-black text-violet-900">Download teacher PDF</button>}</div>

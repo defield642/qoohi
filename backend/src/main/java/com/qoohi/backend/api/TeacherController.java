@@ -5,6 +5,7 @@ import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.util.*;
@@ -23,7 +24,7 @@ public class TeacherController {
       "students", db.queryForList("SELECT DISTINCT u.id,u.full_name,u.email,u.whatsapp,u.role,u.balance,u.home_location FROM teacher_class_members m JOIN teacher_classes c ON c.id=m.class_id JOIN users u ON m.learner_type='user' AND u.id=m.learner_id WHERE c.teacher_id=? AND u.role='student' ORDER BY u.full_name", teacher.get("id")),
       "children", db.queryForList("SELECT DISTINCT p.*,u.full_name parent_name,u.email parent_email FROM teacher_class_members m JOIN teacher_classes c ON c.id=m.class_id JOIN parent_students p ON m.learner_type='parent_child' AND p.id=m.learner_id JOIN users u ON u.id=p.parent_user_id WHERE c.teacher_id=? ORDER BY p.child_name", teacher.get("id")),
       "institutionLearners", db.queryForList("SELECT DISTINCT s.id,s.full_name,s.grade_key,s.class_name,s.institution_id FROM teacher_class_members m JOIN teacher_classes c ON c.id=m.class_id JOIN school_students s ON m.learner_type='institution' AND s.id=m.learner_id WHERE c.teacher_id=? ORDER BY s.full_name", teacher.get("id")),
-      "classes", db.queryForList("SELECT c.id,c.name,c.subject,c.grade,c.description,c.created_at,COUNT(cs.learner_id) AS student_count FROM teacher_classes c LEFT JOIN teacher_class_members cs ON cs.class_id=c.id WHERE c.teacher_id=? GROUP BY c.id ORDER BY c.name", teacher.get("id")),
+      "classes", db.queryForList("SELECT c.id,c.name,c.subject,c.grade,c.description,c.created_at,COUNT(DISTINCT (cs.learner_type,cs.learner_id)) FILTER (WHERE cs.learner_id IS NOT NULL) AS student_count,c.lesson_count AS current_lesson FROM teacher_classes c LEFT JOIN teacher_class_members cs ON cs.class_id=c.id WHERE c.teacher_id=? GROUP BY c.id ORDER BY c.name", teacher.get("id")),
       "progress", db.queryForList("SELECT p.*,u.full_name student_name FROM teacher_progress p LEFT JOIN users u ON u.id=p.student_user_id WHERE p.teacher_id=? ORDER BY p.created_at DESC LIMIT 100", teacher.get("id")),
       "assignments", db.queryForList("SELECT id,class_id,title,filename,created_at FROM teacher_assignments WHERE teacher_id=? ORDER BY created_at DESC", teacher.get("id")));
   }
@@ -32,25 +33,23 @@ public class TeacherController {
   public Map<String,Object> classes(@RequestHeader("Authorization") String header) {
     Map<String,Object> teacher = teacher(header);
     return Map.of("classes", db.queryForList(
-      "SELECT c.id,c.name,c.subject,c.grade,c.description,c.created_at,COUNT(m.learner_id) AS student_count " +
+      "SELECT c.id,c.name,c.subject,c.grade,c.description,c.created_at,COUNT(DISTINCT (m.learner_type,m.learner_id)) FILTER (WHERE m.learner_id IS NOT NULL) AS student_count,c.lesson_count AS current_lesson " +
       "FROM teacher_classes c LEFT JOIN teacher_class_members m ON m.class_id=c.id " +
       "WHERE c.teacher_id=? GROUP BY c.id ORDER BY c.created_at DESC,c.name", teacher.get("id")));
   }
 
-  @GetMapping("/teacher/classes/learners")
-  public Map<String,Object> classLearners(@RequestHeader("Authorization") String header, @RequestParam String q) {
-    teacher(header);
-    String query = q.trim();
-    if (query.length() < 2) throw new IllegalArgumentException("Enter at least two characters to search learners.");
-    String pattern = "%" + query.toLowerCase(Locale.ROOT) + "%";
+  @GetMapping("/teacher/classes/{classId}/available-learners")
+  public Map<String,Object> availableClassLearners(@RequestHeader("Authorization") String header, @PathVariable long classId) {
+    Map<String,Object> teacher = teacher(header);
+    teacherClass(teacher, classId);
     return Map.of("learners", db.queryForList(
-      "SELECT learner_type AS \"learnerType\",learner_id AS \"learnerId\",full_name AS \"fullName\",grade " +
+      "SELECT available.learner_type AS \"learnerType\",available.learner_id AS \"learnerId\",available.full_name AS \"fullName\",available.grade " +
       "FROM (" +
-      " SELECT 'user' AS learner_type,u.id AS learner_id,u.full_name,u.grade_level AS grade FROM users u WHERE u.role='student' AND (lower(u.full_name) LIKE ? OR lower(coalesce(u.email,''))=lower(?)) " +
-      " UNION ALL SELECT 'parent_child',p.id,p.child_name,p.grade_level FROM parent_students p WHERE lower(p.child_name) LIKE ? " +
-      " UNION ALL SELECT 'institution',s.id,s.full_name,s.grade_key FROM school_students s WHERE lower(s.full_name) LIKE ? " +
-      ") available ORDER BY lower(full_name) LIMIT 20",
-      pattern, query, pattern, pattern));
+      " SELECT 'user' AS learner_type,u.id AS learner_id,u.full_name,u.grade_level AS grade FROM users u WHERE u.role='student' " +
+      " UNION ALL SELECT 'parent_child',p.id,p.child_name,p.grade_level FROM parent_students p " +
+      " UNION ALL SELECT 'institution',s.id,s.full_name,s.grade_key FROM school_students s " +
+      ") available WHERE NOT EXISTS (SELECT 1 FROM teacher_class_members m WHERE m.class_id=? AND m.learner_type=available.learner_type AND m.learner_id=available.learner_id) " +
+      "ORDER BY lower(available.full_name) LIMIT 250", classId));
   }
 
   @GetMapping("/teacher/classes/{classId}")
@@ -66,7 +65,7 @@ public class TeacherController {
     return Map.of(
       "class", classInfo,
       "learners", learners,
-      "lessons", db.queryForList("SELECT id,title,subject,starts_at,meeting_url,notes,created_at FROM teacher_lessons WHERE class_id=? ORDER BY starts_at NULLS LAST,created_at DESC", classId),
+      "lessons", db.queryForList("SELECT id,lesson_number AS \"lessonNumber\",title,subject,starts_at,meeting_url,notes,notes_filename AS \"notesFilename\",created_at FROM teacher_lessons WHERE class_id=? ORDER BY lesson_number", classId),
       "assignments", db.queryForList("SELECT id,title,subject,instructions,due_at,link_url,filename,created_at FROM teacher_assignments WHERE class_id=? AND teacher_id=? ORDER BY created_at DESC", classId, teacher.get("id")),
       "submissions", db.queryForList(
         "SELECT s.id AS \"submissionId\",s.assignment_id AS \"assignmentId\",s.learner_type AS \"learnerType\",s.learner_id AS \"learnerId\",s.filename,s.submitted_at AS \"submittedAt\",s.score,s.max_score AS \"maxScore\",s.feedback,s.marked_at AS \"markedAt\",a.title AS \"assignmentTitle\",u.full_name AS \"learnerName\" " +
@@ -100,16 +99,33 @@ public class TeacherController {
     return Map.of("ok", true, "message", "Student added to class.");
   }
 
-  @PostMapping("/teacher/classes/{classId}/lessons")
-  public Map<String,Object> createLesson(@RequestHeader("Authorization") String header, @PathVariable long classId, @RequestBody Map<String,Object> body) {
+  @PostMapping(value="/teacher/classes/{classId}/lessons", consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
+  @Transactional
+  public Map<String,Object> createLesson(@RequestHeader("Authorization") String header, @PathVariable long classId,
+      @RequestParam String title, @RequestParam(required=false) String subject, @RequestParam(required=false) String startsAt,
+      @RequestParam(required=false) String meetingUrl, @RequestParam(required=false) String notes,
+      @RequestParam(required=false) MultipartFile notesFile) throws Exception {
     Map<String,Object> teacher = teacher(header);
     teacherClass(teacher, classId);
-    String title = text(body.get("title"));
-    String meetingUrl = validWebUrl(text(body.get("meetingUrl")), "Lesson link");
-    if (title.isBlank()) throw new IllegalArgumentException("Lesson title is required.");
-    db.update("INSERT INTO teacher_lessons(class_id,teacher_id,title,subject,starts_at,meeting_url,notes) VALUES(?,?,?,?,NULLIF(?,'')::timestamptz,?,?)",
-      classId, teacher.get("id"), title, text(body.get("subject")), text(body.get("startsAt")), meetingUrl, text(body.get("notes")));
-    return Map.of("ok", true, "message", "Lesson added.");
+    String lessonTitle = text(title);
+    String safeMeetingUrl = validWebUrl(text(meetingUrl), "Lesson link");
+    if (lessonTitle.isBlank()) throw new IllegalArgumentException("Lesson title is required.");
+    boolean hasNotesFile = notesFile != null && !notesFile.isEmpty();
+    if (hasNotesFile && (!"application/pdf".equalsIgnoreCase(text(notesFile.getContentType()))
+        && !String.valueOf(notesFile.getOriginalFilename()).toLowerCase(Locale.ROOT).endsWith(".pdf"))) {
+      throw new IllegalArgumentException("Lesson notes must be a PDF file.");
+    }
+    if (hasNotesFile && notesFile.getSize() > 20L * 1024 * 1024) {
+      throw new IllegalArgumentException("Lesson notes PDF must be 20 MB or smaller.");
+    }
+    int lessonNumber = db.queryForObject(
+      "UPDATE teacher_classes SET lesson_count=lesson_count+1 WHERE id=? AND teacher_id=? RETURNING lesson_count",
+      Integer.class, classId, teacher.get("id"));
+    db.update("INSERT INTO teacher_lessons(class_id,teacher_id,lesson_number,title,subject,starts_at,meeting_url,notes,notes_filename,notes_content_type,notes_content) VALUES(?,?,?, ?,?,NULLIF(?,'')::timestamptz,?,?,?,?,?)",
+      classId, teacher.get("id"), lessonNumber, lessonTitle, text(subject), text(startsAt), safeMeetingUrl,
+      text(notes), hasNotesFile ? Optional.ofNullable(notesFile.getOriginalFilename()).orElse("lesson-notes.pdf") : null,
+      hasNotesFile ? "application/pdf" : "application/pdf", hasNotesFile ? notesFile.getBytes() : null);
+    return Map.of("ok", true, "message", "Lesson " + lessonNumber + " added.", "lessonNumber", lessonNumber);
   }
 
   @GetMapping("/classes")
@@ -121,13 +137,36 @@ public class TeacherController {
       long classId = ((Number)item.get("id")).longValue();
       String learnerType = text(item.get("learnerType"));
       long learnerId = ((Number)item.get("learnerId")).longValue();
-      item.put("lessons", db.queryForList("SELECT id,title,subject,starts_at,meeting_url,notes FROM teacher_lessons WHERE class_id=? ORDER BY starts_at NULLS LAST,created_at DESC", classId));
+      item.put("lessons", db.queryForList("SELECT id,lesson_number AS \"lessonNumber\",title,subject,starts_at,meeting_url,notes,notes_filename AS \"notesFilename\" FROM teacher_lessons WHERE class_id=? ORDER BY lesson_number", classId));
       item.put("assignments", db.queryForList(
         "SELECT a.id,a.title,a.subject,a.instructions,a.due_at AS \"dueAt\",a.link_url AS \"linkUrl\",a.filename,a.created_at AS \"createdAt\",s.id AS \"submissionId\",s.filename AS \"submissionFilename\",s.submitted_at AS \"submittedAt\",s.score,s.max_score AS \"maxScore\",s.feedback,s.marked_at AS \"markedAt\" " +
         "FROM teacher_assignments a LEFT JOIN teacher_assignment_submissions s ON s.assignment_id=a.id AND s.learner_type=? AND s.learner_id=? WHERE a.class_id=? ORDER BY a.created_at DESC",
         learnerType, learnerId, classId));
     }
     return Map.of("classes", classes);
+  }
+
+  @GetMapping("/classes/lessons/{id}/notes")
+  public ResponseEntity<byte[]> lessonNotes(@RequestHeader("Authorization") String header, @PathVariable long id) {
+    Map<String,Object> user = auth.user(header);
+    if (user == null) throw new IllegalArgumentException("Login required.");
+    Map<String,Object> lesson = db.queryForMap("SELECT class_id FROM teacher_lessons WHERE id=?", id);
+    long classId = ((Number)lesson.get("class_id")).longValue();
+    String role = text(user.get("role"));
+    if ("teacher".equals(role)) {
+      teacherClass(user, classId);
+    } else if (Set.of("student", "parent").contains(role)) {
+      boolean enrolled = familyClassRows(user).stream()
+        .anyMatch(item -> String.valueOf(item.get("id")).equals(String.valueOf(classId)));
+      if (!enrolled) throw new IllegalArgumentException("Lesson notes are not available for your account.");
+    } else {
+      throw new IllegalArgumentException("Teacher, student, or parent login required.");
+    }
+    List<Map<String,Object>> files = db.queryForList(
+      "SELECT notes_filename AS filename,notes_content_type AS content_type,notes_content AS content FROM teacher_lessons WHERE id=? AND notes_content IS NOT NULL",
+      id);
+    if (files.isEmpty()) throw new IllegalArgumentException("No PDF notes are attached to this lesson.");
+    return fileResponse(files.get(0), "attachment");
   }
 
   @PostMapping("/teacher/progress")
@@ -271,7 +310,7 @@ public class TeacherController {
 
   private Map<String,Object> teacher(String header) { Map<String,Object> user = auth.user(header); if (user == null || !"teacher".equals(user.get("role"))) throw new IllegalArgumentException("Teacher login required."); return user; }
   private Map<String,Object> teacherClass(Map<String,Object> teacher, long classId) {
-    List<Map<String,Object>> rows = db.queryForList("SELECT id,name,subject,grade,description,created_at FROM teacher_classes WHERE id=? AND teacher_id=?", classId, teacher.get("id"));
+    List<Map<String,Object>> rows = db.queryForList("SELECT id,name,subject,grade,description,created_at,lesson_count AS \"currentLesson\" FROM teacher_classes WHERE id=? AND teacher_id=?", classId, teacher.get("id"));
     if (rows.isEmpty()) throw new IllegalArgumentException("Class not found.");
     return rows.get(0);
   }
@@ -280,16 +319,16 @@ public class TeacherController {
     String role = text(user.get("role"));
     if ("student".equals(role)) {
       return db.queryForList(
-        "SELECT c.id,c.name,c.subject,c.grade,c.description,t.full_name AS \"teacherName\",m.learner_type AS \"learnerType\",m.learner_id AS \"learnerId\",u.full_name AS \"learnerName\",u.grade_level AS \"learnerGrade\" " +
+        "SELECT c.id,c.name,c.subject,c.grade,c.description,c.lesson_count AS \"currentLesson\",t.full_name AS \"teacherName\",m.learner_type AS \"learnerType\",m.learner_id AS \"learnerId\",u.full_name AS \"learnerName\",u.grade_level AS \"learnerGrade\" " +
         "FROM teacher_class_members m JOIN teacher_classes c ON c.id=m.class_id JOIN users t ON t.id=c.teacher_id JOIN users u ON m.learner_type='user' AND u.id=m.learner_id " +
         "WHERE m.learner_type='user' AND m.learner_id=? ORDER BY c.name", userId);
     }
     return db.queryForList(
-      "SELECT c.id,c.name,c.subject,c.grade,c.description,t.full_name AS \"teacherName\",m.learner_type AS \"learnerType\",m.learner_id AS \"learnerId\",p.child_name AS \"learnerName\",p.grade_level AS \"learnerGrade\" " +
+      "SELECT c.id,c.name,c.subject,c.grade,c.description,c.lesson_count AS \"currentLesson\",t.full_name AS \"teacherName\",m.learner_type AS \"learnerType\",m.learner_id AS \"learnerId\",p.child_name AS \"learnerName\",p.grade_level AS \"learnerGrade\" " +
       "FROM teacher_class_members m JOIN teacher_classes c ON c.id=m.class_id JOIN users t ON t.id=c.teacher_id JOIN parent_students p ON m.learner_type='parent_child' AND p.id=m.learner_id " +
       "WHERE m.learner_type='parent_child' AND p.parent_user_id=? " +
       "UNION ALL " +
-      "SELECT c.id,c.name,c.subject,c.grade,c.description,t.full_name,m.learner_type,m.learner_id,s.full_name,s.grade_key " +
+      "SELECT c.id,c.name,c.subject,c.grade,c.description,c.lesson_count,t.full_name,m.learner_type,m.learner_id,s.full_name,s.grade_key " +
       "FROM teacher_class_members m JOIN teacher_classes c ON c.id=m.class_id JOIN users t ON t.id=c.teacher_id JOIN school_students s ON m.learner_type='institution' AND s.id=m.learner_id " +
       "WHERE m.learner_type='institution' AND lower(s.parent_email)=lower(?) ORDER BY name",
       userId, text(user.get("email")));

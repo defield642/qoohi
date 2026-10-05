@@ -137,8 +137,27 @@ CREATE TABLE IF NOT EXISTS teacher_lessons (
  starts_at TIMESTAMPTZ,
  meeting_url TEXT NOT NULL DEFAULT '',
  notes TEXT NOT NULL DEFAULT '',
+ lesson_number INTEGER NOT NULL DEFAULT 0,
+ notes_filename VARCHAR(255),
+ notes_content_type VARCHAR(120) NOT NULL DEFAULT 'application/pdf',
+ notes_content BYTEA,
  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE teacher_lessons ADD COLUMN IF NOT EXISTS lesson_number INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE teacher_lessons ADD COLUMN IF NOT EXISTS notes_filename VARCHAR(255);
+ALTER TABLE teacher_lessons ADD COLUMN IF NOT EXISTS notes_content_type VARCHAR(120) NOT NULL DEFAULT 'application/pdf';
+ALTER TABLE teacher_lessons ADD COLUMN IF NOT EXISTS notes_content BYTEA;
+ALTER TABLE teacher_classes ADD COLUMN IF NOT EXISTS lesson_count INTEGER NOT NULL DEFAULT 0;
+WITH numbered AS (
+ SELECT id,ROW_NUMBER() OVER (PARTITION BY class_id ORDER BY created_at,id)::INTEGER AS lesson_number
+ FROM teacher_lessons WHERE lesson_number=0
+)
+UPDATE teacher_lessons lesson SET lesson_number=numbered.lesson_number
+FROM numbered WHERE lesson.id=numbered.id;
+UPDATE teacher_classes class SET lesson_count=GREATEST(class.lesson_count,counts.total)
+FROM (SELECT class_id,COUNT(*)::INTEGER AS total FROM teacher_lessons GROUP BY class_id) counts
+WHERE class.id=counts.class_id;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_teacher_lessons_sequence ON teacher_lessons(class_id,lesson_number);
 CREATE TABLE IF NOT EXISTS teacher_progress (
  id BIGSERIAL PRIMARY KEY,
  teacher_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

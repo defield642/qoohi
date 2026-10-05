@@ -1,0 +1,186 @@
+QOOHI PROJECT FILE GUIDE
+========================
+
+This guide describes the main application files. Paths are relative to the
+repository root.
+
+FRONTEND: src/
+-------------
+
+src/main.jsx
+  Vite entry point for the main user application. Mounts UserApp.
+
+src/UserApp.jsx
+  Small wrapper that exports the user portal.
+
+src/UserPortal.jsx
+  Main signed-in user portal. Handles user-facing navigation and role-based
+  portal content for learners, parents, and teachers.
+
+src/student.jsx
+  Student dashboard and student-facing learning interface.
+
+src/parent.jsx
+  Parent dashboard and family-facing information, including a learner's
+  classes and class resources.
+
+src/teacher.jsx
+  Teacher dashboard and class workflows. Includes class management, adding
+  available learners to a class, numbered lessons, optional PDF lesson notes,
+  assignments, submissions, grading, and family class views.
+
+src/UserUi.jsx
+  Shared user-interface components and helpers, including page layout and
+  text-to-speech controls.
+
+src/RoleRegisterForm.jsx
+  Shared registration form used by role-specific registration screens.
+
+src/studentregister.jsx
+  Student registration screen.
+
+src/parentregister.jsx
+  Parent registration screen.
+
+src/teacherregister.jsx
+  Teacher registration screen.
+
+src/InstitutionPortal.jsx
+  Institution portal root and dashboard flow.
+
+src/InstitutionApp.jsx
+  Small wrapper that exports the institution portal.
+
+src/institution-main.jsx
+  Vite entry point for the institution application.
+
+src/institution.jsx
+  Institution dashboard and institution-facing management UI.
+
+src/institutionregister.jsx
+  Institution registration screen.
+
+src/AdminApp.jsx
+  Admin dashboard and administration workflows.
+
+src/admin-main.jsx
+  Vite entry point for the admin application.
+
+src/RegistrationGrowthChart.jsx
+  Reusable registration growth chart used by dashboard previews.
+
+src/index.css
+  Global styles shared by the application.
+
+src/App.css
+  Additional application styles.
+
+BACKEND: backend/src/main/java/com/qoohi/backend/
+------------------------------------------------
+
+QoohiBackendApplication.java
+  Spring Boot application entry point; enables scheduled tasks.
+
+api/TeacherController.java
+  Teacher class, lesson, assignment, submission, grading, and family class
+  endpoints. Also controls access to lesson-note downloads.
+
+api/UserController.java
+  User account and user-facing API endpoints.
+
+api/LegacyUserController.java
+  Compatibility endpoints for older user API behavior.
+
+api/InstitutionController.java
+  Institution registration and institution-facing API endpoints.
+
+api/AdminController.java
+  Admin management API endpoints.
+
+api/AdminAuthController.java
+  Admin authentication endpoints.
+
+api/AiController.java
+  AI tutor and related AI API endpoints.
+
+api/GoogleOAuthController.java
+  Google OAuth sign-in endpoints.
+
+api/MpesaController.java
+  M-Pesa payment and callback endpoints.
+
+api/IepBookController.java
+  IEP book-related API endpoints.
+
+api/PublicPreviewController.java
+  Public preview data endpoints.
+
+api/RootController.java
+  Root/health or basic service endpoints.
+
+api/ApiErrorHandler.java
+  Shared REST exception handling and API error responses.
+
+config/DataSourceConfig.java
+  Builds the PostgreSQL datasource from DATABASE_URL configuration.
+
+config/CorsConfig.java
+  Configures cross-origin requests to the backend.
+
+service/AuthService.java
+  Shared authentication and account-related service logic.
+
+service/MapsService.java
+  Google Places autocomplete and place detail lookup.
+
+service/NotificationService.java
+  WhatsApp notification integration.
+
+BACKEND RESOURCES AND TESTS
+---------------------------
+
+backend/src/main/resources/schema.sql
+  Database schema and startup migrations. Includes class membership,
+  sequential lesson numbering, lesson-note storage, assignments, and related
+  application tables.
+
+backend/src/main/resources/application.yml
+  Spring Boot application and backend configuration defaults.
+
+backend/src/test/java/com/qoohi/backend/api/ApiErrorHandlerTest.java
+  Tests shared API error handling.
+
+backend/src/test/java/com/qoohi/backend/api/LegacyUserControllerTest.java
+  Tests legacy user API behavior.
+
+backend/src/test/java/com/qoohi/backend/config/DataSourceConfigTest.java
+  Tests datasource configuration behavior.
+
+backend/src/test/java/com/qoohi/backend/service/AuthServiceTest.java
+  Tests authentication service logic.
+
+PROJECT ENTRY POINTS AND BUILD CONFIGURATION
+--------------------------------------------
+
+index.html
+  HTML entry document for the main user application.
+
+institution.html
+  HTML entry document for the institution application.
+
+admin.html
+  HTML entry document for the admin application.
+
+vite.config.js
+  Vite build configuration, including the application entry points.
+
+package.json
+  Frontend dependencies and npm scripts such as development and production
+  builds.
+
+backend/pom.xml
+  Maven configuration and dependencies for the Spring Boot backend.
+
+.env.example
+  Example environment-variable names for local configuration. Do not put real
+  credentials in this file.
