@@ -123,7 +123,8 @@ export default function GuestDashboard({ onRegisterRole, apiBase = "" }) {
   const [subject, setSubject] = useState("");
   const [topic, setTopic] = useState("");
   const [customTopic, setCustomTopic] = useState("");
-  const [aiReply, setAiReply] = useState("");
+  const [aiConversation, setAiConversation] = useState([]);
+  const [aiFollowup, setAiFollowup] = useState("");
   const [aiError, setAiError] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const roles = {
@@ -190,19 +191,33 @@ export default function GuestDashboard({ onRegisterRole, apiBase = "" }) {
   const askAi = async (event) => {
     event.preventDefault();
     const selectedTopic = topic === "__custom__" ? customTopic.trim() : topic;
-    if (!selectedTopic || !aiActive || aiLoading) return;
+    const followup = aiFollowup.trim();
+    const isFollowup = aiConversation.length > 0;
+    if (!selectedTopic || !aiActive || aiLoading || (isFollowup && !followup)) return;
     setAiLoading(true);
     setAiError("");
-    setAiReply("");
     try {
+      const prompt = isFollowup
+        ? `Continue teaching Kenyan CBC Grade ${grade} ${subject}, topic ${selectedTopic}. The lesson so far was:\n${aiConversation.map((message) => `${message.role === "assistant" ? "Tutor" : "Learner"}: ${message.content}`).join("\n\n")}\n\nLearner's answer to your last check question: ${followup}\n\nRespond to the learner's answer kindly, explain any correction step by step, then continue the lesson with one short practice question. Wait for the learner's answer.`
+        : `Teach Kenyan CBC Grade ${grade} ${subject}: ${selectedTopic}. Do not return only an answer. Teach this mini-lesson in order: learning goal, numbered explanation steps, one fully worked example, one guided practice with a hint, then one short check-for-understanding question. Use age-appropriate language and stop after asking the check question.`;
       const response = await fetch(`${apiBase}/api/ai/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: `Teach Kenyan CBC Grade ${grade} ${subject}: ${selectedTopic}. Do not return only an answer. Teach this mini-lesson in order: learning goal, numbered explanation steps, one fully worked example, one guided practice with a hint, then one short check-for-understanding question. Use age-appropriate language and stop after asking the check question.` }),
+        body: JSON.stringify({ prompt }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || data.message || data.error || "The AI tutor is temporarily unavailable.");
-      setAiReply(data.reply || data.content || "No answer was returned. Please try another question.");
+      const reply = data.reply || data.content || "No answer was returned. Please try another question.";
+      if (isFollowup) {
+        setAiConversation((currentConversation) => [
+          ...currentConversation,
+          { role: "user", content: followup },
+          { role: "assistant", content: reply },
+        ]);
+        setAiFollowup("");
+      } else {
+        setAiConversation([{ role: "assistant", content: reply }]);
+      }
     } catch (error) {
       setAiError(error.message || "The AI tutor is temporarily unavailable.");
     } finally {
@@ -258,7 +273,7 @@ export default function GuestDashboard({ onRegisterRole, apiBase = "" }) {
         <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[.2em] text-violet-600">AI learning coach</p><h2 className="mt-2 text-xl font-black text-slate-900">Ask a learning question</h2><p className="mt-2 text-sm text-slate-500">Try the real tutor for up to three minutes. Please do not enter private information.</p></div><span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-black text-violet-700">{aiActive ? `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")} left` : "3 min preview"}</span></div>
         {!aiActive && secondsLeft > 0 && <button type="button" onClick={startAi} className="mt-5 rounded-full bg-violet-600 px-5 py-3 text-sm font-black text-white hover:bg-violet-700">Start AI preview</button>}
         {!aiActive && secondsLeft === 0 && <div className="mt-5"><p className="text-sm text-slate-600">Your guest tutor time has ended.</p><button type="button" onClick={() => onRegisterRole(role)} className="mt-3 rounded-full bg-violet-600 px-5 py-3 text-sm font-black text-white">Register to continue</button></div>}
-        {aiActive && <form onSubmit={askAi} className="mt-5 space-y-3">
+        {aiActive && aiConversation.length === 0 && <form onSubmit={askAi} className="mt-5 space-y-3">
           <div className="grid gap-3 sm:grid-cols-[10rem_1fr]">
             <label className="text-sm font-bold text-slate-700">Grade<select value={grade} onChange={(event) => { setGrade(event.target.value); setTopic(""); }} className="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>Grade {index + 1}</option>)}</select></label>
             <label className="text-sm font-bold text-slate-700">Subject<select value={subject} onChange={(event) => { setSubject(event.target.value); setTopic(""); }} className="mt-1 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900"><option value="">Choose a subject</option>{["Mathematics", "English", "Kiswahili", "Science", "Cybersecurity", "Python"].map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
@@ -268,7 +283,19 @@ export default function GuestDashboard({ onRegisterRole, apiBase = "" }) {
           <button type="submit" disabled={aiLoading || !topic || (topic === "__custom__" && !customTopic.trim())} className="rounded-full bg-violet-600 px-5 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-50">{aiLoading ? "Teaching…" : "Ask the tutor"}</button>
         </form>}
         {aiError && <p role="alert" className="mt-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-base font-semibold text-rose-900">{aiError}</p>}
-        {aiReply && <div className="mt-4 max-h-64 overflow-y-auto rounded-2xl bg-violet-50 p-4 text-sm leading-6 text-slate-700"><p className="whitespace-pre-wrap">{aiReply}</p><SpeakTextButton text={aiReply} lang={subject === "Kiswahili" ? "sw-KE" : "en-KE"} className="mt-3" /></div>}
+        {aiConversation.length > 0 && <div className="mt-4 max-h-80 space-y-3 overflow-y-auto rounded-2xl bg-violet-50 p-4 text-sm leading-6 text-slate-700" aria-live="polite">
+          {aiConversation.map((message, index) => <div key={`${message.role}-${index}`} className={`rounded-xl p-3 ${message.role === "assistant" ? "bg-white" : "bg-violet-100"}`}>
+            <p className="mb-1 text-xs font-black uppercase tracking-wide text-violet-700">{message.role === "assistant" ? "QOOHI tutor" : "Your answer"}</p>
+            <p className="whitespace-pre-wrap">{message.content}</p>
+            {message.role === "assistant" && <SpeakTextButton text={message.content} lang={subject === "Kiswahili" ? "sw-KE" : "en-KE"} className="mt-3" />}
+          </div>)}
+          {aiLoading && <p role="status" className="font-semibold text-violet-800">The tutor is reviewing your answer…</p>}
+        </div>}
+        {aiConversation.length > 0 && aiActive && <form onSubmit={askAi} className="mt-3 space-y-2">
+          <label htmlFor="guest-ai-followup" className="block text-sm font-bold text-slate-700">Answer the tutor’s question</label>
+          <textarea id="guest-ai-followup" required maxLength={1000} rows={3} value={aiFollowup} onChange={(event) => setAiFollowup(event.target.value)} placeholder="Type your answer here…" className="block w-full resize-y rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-500 focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-200" />
+          <button type="submit" disabled={aiLoading || !aiFollowup.trim()} className="rounded-full bg-violet-600 px-5 py-3 text-sm font-black text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50">{aiLoading ? "Reviewing…" : "Send answer"}</button>
+        </form>}
       </div>
     </div>
     <div className="preview-card mt-5 rounded-[1.5rem] bg-white p-6 shadow-sm">

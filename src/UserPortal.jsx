@@ -2640,7 +2640,7 @@ function QoohiAIPage({ sessionToken }) {
       title="QOOHI AI"
       subtitle="Ask anything. Learn. Build. Create."
     >
-      <GlassPanel className="flex h-[70vh] flex-col p-4">
+      <GlassPanel className="flex h-[70vh] min-h-[18rem] flex-col p-4">
         <div className="mb-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-4">
           <p className="text-xs font-black uppercase tracking-[0.24em] text-cyan-300">Start a lesson</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_110px_1fr_auto]">
@@ -2650,7 +2650,7 @@ function QoohiAIPage({ sessionToken }) {
             <button type="button" onClick={startLesson} disabled={loading || !lessonSetup.subject.trim() || !lessonSetup.topic.trim()} className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-50">Teach me</button>
           </div>
         </div>
-        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
 
 
           {messages.map((msg, index) => (
@@ -2739,10 +2739,11 @@ function QoohiAIPage({ sessionToken }) {
           )}
         </div>
 
-        <div className="flex items-center gap-2 border-t border-white/10 p-4">
+        <div className="flex shrink-0 items-center gap-2 border-t border-white/10 p-4">
           <input
+            aria-label="Answer the tutor's question or send a message"
             className="flex-1 rounded-xl bg-slate-950/60 px-4 py-3 text-white outline-none"
-            placeholder="Type your message..."
+            placeholder="Type your answer or message..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) =>
